@@ -391,7 +391,7 @@ def main():
   import argparse
 
   parser = argparse.ArgumentParser()
-  parser.add_argument('--indicators', nargs='*', help='scan all indicators by default')
+  parser.add_argument('indicator_name')
   parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
   parser.add_argument('--areas', nargs='*', help='scan all areas by default')
   parser.add_argument('--cube-path', default='cube', help='%(default)s')
@@ -402,33 +402,28 @@ def main():
 
   o = parser.parse_args()
 
-  if not o.indicators:
-    o.indicators = os.listdir (o.cube_path)  
-
   if not o.out_cube_path:
     o.out_cube_path = o.cube_path
 
-  for indicator_name in o.indicators:
+  if o.ranking:
+    preprocess_ranking(o.indicator_name, o.cube_path, o.out_cube_path)
+    if o.no_markdown:
+      continue
 
-    if o.ranking:
-      preprocess_ranking(indicator_name, o.cube_path, o.out_cube_path)
-      if o.no_markdown:
-        continue
+  if not o.study_types:
+    study_types = [d for d in os.listdir(os.path.join(o.cube_path, o.indicator_name)) if os.path.isdir(os.path.join(o.cube_path, o.indicator_name, d))]
+  else:
+    study_types = o.study_types
 
-    if not o.study_types:
-      study_types = [d for d in os.listdir(os.path.join(o.cube_path, indicator_name)) if os.path.isdir(os.path.join(o.cube_path, indicator_name, d))]
-    else:
-      study_types = o.study_types
-
-    for studytype in study_types:
-      print(studytype)
-      try:
-        process_indicator(indicator_name, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
-          study_type=studytype, templatesdir=o.templates_dir)
-      except Exception as error:
-        raise
-        print(error)
-        continue
+  for studytype in study_types:
+    print(studytype)
+    try:
+      process_indicator(o.indicator_name, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
+        study_type=studytype, templatesdir=o.templates_dir)
+    except Exception as error:
+      raise
+      print(error)
+      continue
 
 
 if __name__ == '__main__':
