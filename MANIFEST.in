@@ -1,0 +1,2 @@
+include versioneer.py
+include isipedia/_version.py
