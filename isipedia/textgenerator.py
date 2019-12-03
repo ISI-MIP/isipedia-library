@@ -168,8 +168,14 @@ class TemplateData(CountryStats):
     if self.name[len(self.name)-1] == 's':
       return self.name+'’'
     else:
-      return self.name+'’s'  
+      return self.name+'’s'   
 
+  @property
+  def thename(self):
+    if self.name == 'World' or self.name in ():
+      return 'the '+self.name.lower()
+    else:
+      return self.name
 
 def load_country_data(indicator, study_type, area, input_folder, country_data_folder='cube/country_data'):
   jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
