@@ -8,9 +8,9 @@ import logging
 
 
 class JsonData:
-  """ This class is a useful abstraction of a JsonFile that 
-  can accomodate for both vs-time and vs-temp data structure with a minimum of code modifications
-  """
+    """ This class is a useful abstraction of a JsonFile that 
+    can accomodate for both vs-time and vs-temp data structure with a minimum of code modifications
+    """
     def __init__(self, data, x, vs_time=False):
         self.data = data
         self.x = x
@@ -56,8 +56,8 @@ class JsonData:
 
 
 class JsonFile(JsonData):
-  """This subclass is in fact a wrapper around JsonData
-  """
+    """This subclass is in fact a wrapper around JsonData
+    """
     def __init__(self, fname):
         self._filename = fname
         js = json.load(open(fname))
@@ -85,8 +85,8 @@ class JsonFile(JsonData):
 
 
 class CubeVariable:
-  """This class corresponds to cube definition of a variable
-  """
+    """This class corresponds to cube definition of a variable
+    """
     def __init__(self, indicator, studytype, name):
         self.indicator = indicator
         self.studytype = studytype
@@ -152,8 +152,8 @@ class CountryStats:
 
 
 class TemplateData(CountryStats):
-  """template data accessible for an author
-  """
+    """template data accessible for an author
+    """
 
     def __init__(self, code, variables, **stats):
         super().__init__(**stats)
@@ -181,37 +181,37 @@ class TemplateData(CountryStats):
         jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
         variables = {CubeVariable._varname(fname, area):JsonFile(fname) for fname in jsfiles}
         try:
-          stats = CountryStats.load(os.path.join(country_data_folder, area, area+'_general.json'))
+            stats = CountryStats.load(os.path.join(country_data_folder, area, area+'_general.json'))
         except:
-          logging.warning("country stats not found for: "+area)
-          raise
-          stats = CountryStats("undefined")
+            logging.warning("country stats not found for: "+area)
+            raise
+            stats = CountryStats("undefined")
 
 
         # for some reason all numbers are string, convert to float
         for e in stats.stats:
-          try:
-            e['value'] = float(e['value'])
-          except:
-            raise
-            pass
-          try:
-            e['rank'] = float(e['rank'])
-          except:
-            raise
-            pass
+            try:
+                e['value'] = float(e['value'])
+            except:
+                raise
+                pass
+            try:
+                e['rank'] = float(e['rank'])
+            except:
+                raise
+                pass
 
-    return TemplateData(area, variables=variables, **vars(stats))
+        return TemplateData(area, variables=variables, **vars(stats))
 
 
 def select_template(indicator, area=None, templatesdir='templates'):
     candidates = [
-      '{templatesdir}/{indicator}/{indicator}_{area}.md'.format(indicator=indicator, area=area, templatesdir=templatesdir),
-      '{templatesdir}/{indicator}/{indicator}.md'.format(indicator=indicator, templatesdir=templatesdir),
-      ]
+        '{templatesdir}/{indicator}/{indicator}_{area}.md'.format(indicator=indicator, area=area, templatesdir=templatesdir),
+        '{templatesdir}/{indicator}/{indicator}.md'.format(indicator=indicator, templatesdir=templatesdir),
+    ]
     for candidate in candidates:
-      if os.path.exists(candidate):
-        return candidate
+        if os.path.exists(candidate):
+            return candidate
 
     print('\n'.join(candidates))
     raise ValueError('no template found for '+repr((indicator, area)))
@@ -284,15 +284,15 @@ def preprocess_ranking(indicator, cube_path, out_cube_path=None, country_names=N
 
     for study in cfg['study-types']:
         for name in study['ranking-files']:
-      category = study['directory']
-      print(indicator, category, name)
-      var = CubeVariable(indicator, category, name)
-      data = _load_ranking_data(var, cube_path, country_names=country_names)
-      fname = ranking_file(indicator, category, name, out_cube_path)
-      dname = os.path.dirname(fname)
-      if not os.path.exists(dname):
-        os.makedirs(dname)
-      json.dump(data, open(fname, 'w'))
+            category = study['directory']
+            print(indicator, category, name)
+            var = CubeVariable(indicator, category, name)
+            data = _load_ranking_data(var, cube_path, country_names=country_names)
+            fname = ranking_file(indicator, category, name, out_cube_path)
+            dname = os.path.dirname(fname)
+            if not os.path.exists(dname):
+                os.makedirs(dname)
+            json.dump(data, open(fname, 'w'))
 
 
 class Ranking:
@@ -300,7 +300,7 @@ class Ranking:
         self.data = data
         self.areas = sorted([area for area in data if not area.startswith('_')])
 
-  def value(self, area, x, scenario=None):
+    def value(self, area, x, scenario=None):
         index = self.data['_index'].index(x)
         if self.data['_plot_type'] == 'indicator_vs_temperature':
             return self.data[area]['null'][index]
@@ -408,7 +408,7 @@ def main():
     if o.ranking:
         preprocess_ranking(o.indicator_name, o.cube_path, o.out_cube_path)
         if o.no_markdown:
-            continue
+            pass
 
     if not o.study_types:
         study_types = [d for d in os.listdir(os.path.join(o.cube_path, o.indicator_name)) if os.path.isdir(os.path.join(o.cube_path, o.indicator_name, d))]
