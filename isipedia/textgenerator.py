@@ -177,31 +177,37 @@ class TemplateData(CountryStats):
         else:
           return self.name
 
-    def load_country_data(indicator, study_type, area, input_folder, country_data_folder='cube/country_data'):
-        jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
-        variables = {CubeVariable._varname(fname, area):JsonFile(fname) for fname in jsfiles}
+def load_country_data(indicator, study_type, area, input_folder, country_data_folder=None):
+    jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
+    variables = {CubeVariable._varname(fname, area):JsonFile(fname) for fname in jsfiles}
+    if country_data_folder is None:
+        country_data_folder = 'cube/country_data'
+    try:
+        stats = CountryStats.load(os.path.join(country_data_folder, area, area+'_general.json'))
+    except:
+        logging.warning("country stats not found for: "+area)
+        raise
+        stats = CountryStats("undefined")
+
+
+    # for some reason all numbers are string, convert to float
+    for e in stats.stats:
         try:
-            stats = CountryStats.load(os.path.join(country_data_folder, area, area+'_general.json'))
+            e['value'] = float(e['value'])
+        except KeyError:
+            pass  # no value key
         except:
-            logging.warning("country stats not found for: "+area)
             raise
-            stats = CountryStats("undefined")
+            pass
+        try:
+            e['rank'] = float(e['rank'])
+        except KeyError:
+            pass  # no rank key
+        except:
+            raise
+            pass
 
-
-        # for some reason all numbers are string, convert to float
-        for e in stats.stats:
-            try:
-                e['value'] = float(e['value'])
-            except:
-                raise
-                pass
-            try:
-                e['rank'] = float(e['rank'])
-            except:
-                raise
-                pass
-
-        return TemplateData(area, variables=variables, **vars(stats))
+    return TemplateData(area, variables=variables, **vars(stats))
 
 
 def select_template(indicator, area=None, templatesdir='templates'):
@@ -346,9 +352,9 @@ def ordinal(num):
 
 
 def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='ISIMIP-projections', 
-    templatesdir='templates'):
+    templatesdir='templates', country_data_folder=None):
   
-    world = load_country_data(indicator, study_type, 'world', input_folder)
+    world = load_country_data(indicator, study_type, 'world', input_folder, country_data_folder=country_data_folder)
 
     # Going though all the countries in the list.
     if country_names is None:
@@ -371,7 +377,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
     for area in country_names:
         print(indicator+ " - " +area)  
 
-        country = load_country_data(indicator, study_type, area, input_folder)
+        country = load_country_data(indicator, study_type, area, input_folder, country_data_folder=country_data_folder)
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
         # tmpl = env.get_template(tmplfile)
@@ -399,8 +405,10 @@ def main():
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
+    parser.add_argument('--country-data-dir', default=None, help='templates directory (default: <cube>/country_data)')
 
     o = parser.parse_args()
+    print(o.country_data_dir)
 
     if not o.out_cube_path:
         o.out_cube_path = o.cube_path
@@ -419,7 +427,7 @@ def main():
         print(studytype)
         try:
             process_indicator(o.indicator_name, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
-                study_type=studytype, templatesdir=o.templates_dir)
+                study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir)
         except Exception as error:
             raise
             print(error)
