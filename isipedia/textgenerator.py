@@ -105,7 +105,9 @@ class CubeVariable:
     def _varname(fname, area=None):
         ' determine variable name from json file name '
         name, ext = os.path.splitext(os.path.basename(fname))
-        return name.replace('-','_').rstrip('_{}'.format(area)) # remove area name
+        if name.endswith(area):
+            name = name[:-len(area)-1]
+        return name.replace('-','_')
 
 
 class CountryStats:
