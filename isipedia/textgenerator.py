@@ -6,7 +6,6 @@ import glob
 import jinja2
 import logging
 
-
 class JsonData:
     """ This class is a useful abstraction of a JsonFile that 
     can accomodate for both vs-time and vs-temp data structure with a minimum of code modifications
@@ -121,19 +120,27 @@ class CountryStats:
     @property
     def pop_total(self):
         "million people"
-        i = [e['type'] for e in self.stats].index('POP_TOTL')
-        return self.stats[i]['value']
+        try:
+            i = [e['type'] for e in self.stats].index('POP_TOTL')
+        except ValueError as error:
+            # logging.warning(str(error))
+            return float('nan')
+        return self.stats[i]['value'] or float('nan')
 
     @property
     def pop_density(self):
         'people/km2'
-        i = [e['type'] for e in self.stats].index('POP_DNST')
-        return self.stats[i]['value']
+        try:
+            i = [e['type'] for e in self.stats].index('POP_DNST')
+        except ValueError as error:
+            # logging.warning(str(error))
+            return float('nan')
+        return self.stats[i]['value'] or float('nan')
 
     @property
     def area(self):
         "km2"
-        return self.pop_total*1e6 / self.pop_density
+        return (self.pop_total*1e6 / self.pop_density)  or float('nan')
 
     # @property
     # def pop_rural_pct(self):
@@ -184,9 +191,10 @@ def load_country_data(indicator, study_type, area, input_folder, country_data_fo
         country_data_folder = 'cube/country_data'
     try:
         stats = CountryStats.load(os.path.join(country_data_folder, area, area+'_general.json'))
+        # stats = CountryStats(area)
     except:
         logging.warning("country stats not found for: "+area)
-        raise
+        # raise
         stats = CountryStats("undefined")
 
 
@@ -359,6 +367,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
     # Going though all the countries in the list.
     if country_names is None:
         country_names = sorted(os.listdir (os.path.join(input_folder, indicator, study_type)))
+        country_names = [c for c in country_names if os.path.exists(os.path.join(country_data_folder, c))]
 
     # load country ranking
     cfg = load_ranking_config(indicator, output_folder)
