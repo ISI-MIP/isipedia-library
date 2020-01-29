@@ -408,7 +408,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
             if fail_on_error:
                 raise
             else:
-                logging.warning('!! failed',area,'::', str(error))
+                logging.warning('!! failed',area, '-> try --fail switch to provoke failure with error message')
 
 
 
