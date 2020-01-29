@@ -362,7 +362,7 @@ def ordinal(num):
 
 
 def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='ISIMIP-projections', 
-    templatesdir='templates', country_data_folder=None):
+    templatesdir='templates', country_data_folder=None, fail_on_error=False):
   
     world = load_country_data(indicator, study_type, 'world', input_folder, country_data_folder=country_data_folder)
 
@@ -385,9 +385,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
                 ranking[name.replace('-','_')] = Ranking(ranking_data)
 
 
-    for area in country_names:
-        print(indicator+ " - " +area)  
-
+    def process_area(area):
         country = load_country_data(indicator, study_type, area, input_folder, country_data_folder=country_data_folder)
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
@@ -401,6 +399,17 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         md_file = os.path.join(output_folder_local, '{indicator}-{area}.md'.format(indicator=indicator, area=area))
         with open(md_file, 'w') as f:
             f.write(text)
+
+    for area in country_names:
+        print(indicator+ " - " +area)  
+        try:
+            process_area(area)
+        except Exception as error:
+            if fail_on_error:
+                raise
+            else:
+                logging.warning('!! failed',area,'::', str(error))
+
 
 
 def main():
@@ -417,6 +426,7 @@ def main():
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--country-data-dir', default=None, help='templates directory (default: <cube>/country_data)')
+    parser.add_argument('--fail-on-error', action='store_true', help='fail instead of passing when area error')
 
     o = parser.parse_args()
     print(o.country_data_dir)
@@ -438,7 +448,8 @@ def main():
         print(studytype)
         try:
             process_indicator(o.indicator_name, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
-                study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir)
+                study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir,
+                fail_on_error=o.fail_on_error)
         except Exception as error:
             raise
             print(error)
