@@ -417,7 +417,6 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('indicator_name')
     parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
     parser.add_argument('--areas', nargs='*', help='scan all areas by default')
     parser.add_argument('--indicators', nargs='+', required=True, help='')
