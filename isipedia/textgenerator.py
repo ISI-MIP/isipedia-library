@@ -420,6 +420,7 @@ def main():
     parser.add_argument('indicator_name')
     parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
     parser.add_argument('--areas', nargs='*', help='scan all areas by default')
+    parser.add_argument('--indicators', nargs='+', required=True, help='')
     parser.add_argument('--cube-path', default='cube', help='%(default)s')
     parser.add_argument('--out-cube-path', help='if output shall differs from output')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
@@ -434,26 +435,28 @@ def main():
     if not o.out_cube_path:
         o.out_cube_path = o.cube_path
 
-    if o.ranking:
-        preprocess_ranking(o.indicator_name, o.cube_path, o.out_cube_path)
-        if o.no_markdown:
-            pass
+    for indicator in o.indicators:
 
-    if not o.study_types:
-        study_types = [d for d in os.listdir(os.path.join(o.cube_path, o.indicator_name)) if os.path.isdir(os.path.join(o.cube_path, o.indicator_name, d))]
-    else:
-        study_types = o.study_types
+        if o.ranking:
+            preprocess_ranking(indicator, o.cube_path, o.out_cube_path)
+            if o.no_markdown:
+                pass
 
-    for studytype in study_types:
-        print(studytype)
-        try:
-            process_indicator(o.indicator_name, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
-                study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir,
-                fail_on_error=o.fail_on_error)
-        except Exception as error:
-            raise
-            print(error)
-            continue
+        if not o.study_types:
+            study_types = [d for d in os.listdir(os.path.join(o.cube_path, indicator)) if os.path.isdir(os.path.join(o.cube_path, indicator, d))]
+        else:
+            study_types = o.study_types
+
+        for studytype in study_types:
+            print(studytype)
+            try:
+                process_indicator(indicator, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
+                    study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir,
+                    fail_on_error=o.fail_on_error)
+            except Exception as error:
+                raise
+                print(error)
+                continue
 
 
 if __name__ == '__main__':
