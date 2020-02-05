@@ -142,7 +142,13 @@ class CountryStats:
     @property
     def area(self):
         "km2"
-        return (self.pop_total*1e6 / self.pop_density)  or float('nan')
+        #return (self.pop_total*1e6 / self.pop_density)  or float('nan')
+        try:
+            i = [e['type'] for e in self.stats].index('total_area')
+        except ValueError as error:
+            # logging.warning(str(error))
+            return float('nan')
+        return self.stats[i]['value'] or float('nan')
 
     # @property
     # def pop_rural_pct(self):
@@ -194,7 +200,8 @@ def load_country_data(indicator, study_type, area, input_folder, country_data_fo
     try:
         stats = CountryStats.load(os.path.join(country_data_folder, area, area+'_general.json'))
         # stats = CountryStats(area)
-    except:
+    except Exception as error:
+        print('!!', str(error))
         logging.warning("country stats not found for: "+area)
         # raise
         stats = CountryStats("undefined")
@@ -408,7 +415,8 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
             if fail_on_error:
                 raise
             else:
-                logging.warning('!! failed',area,'::', str(error))
+                logging.warning(str(error))
+                print('!! failed',area)
 
 
 
