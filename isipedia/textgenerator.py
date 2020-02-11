@@ -6,81 +6,8 @@ import glob
 import jinja2
 import logging
 
-class JsonData:
-    """ This class is a useful abstraction of a JsonFile that 
-    can accomodate for both vs-time and vs-temp data structure with a minimum of code modifications
-    """
-    def __init__(self, data, x, vs_time=False):
-        self.data = data
-        self.x = x
-        self.vs_time = vs_time
+from isipedia.jsonfile import JsonFile
 
-    def _data(self, scenario):
-        return self.data[scenario] if self.vs_time else self.data
-
-    def index(self, x):
-        time_map = {
-          "farfuture" : "2081-2100",
-          "nearfuture" : "2041-2060",
-          "today" : "2001-2020",
-        }
-        return self.x.index(time_map.get(x, x)) 
-
-    def getarray(self, scenario=None, climate_model=None, impact_model=None, field=None):
-        """get array of x*scenario """
-        data = self._data(scenario)
-        if impact_model:
-          return data[climate_model or 'overall']['runs'][impact_model][field or 'mean']
-        else:
-          return data[climate_model or 'overall'][field or 'median']
-
-    def get(self, x, scenario=None, climate_model=None, impact_model=None, field=None):
-        """get single number """
-        index = self.index(x)
-        y = self.getarray(scenario, climate_model, impact_model, field)
-        return y[index]
-
-
-    def getens(self, x, scenario=None, climate_model=None, impact_model=None, field='mean'):
-        """get an array of values for all climate and impact models
-        """
-        index = self.index(x)
-        data = self._data(scenario)
-        climate_models = self.climate_model_list if climate_model is None else [climate_model]
-        impact_models = self.impact_model_list if impact_model is None else [impact_model]
-        alldata = [data[climate_model]['runs'][impact_model][field][index] for climate_model in climate_models for impact_model in impact_models]
-        return [l for l in alldata if l is not None]
-
-    getall = getens  # alias for backcompatibility
-
-
-class JsonFile(JsonData):
-    """This subclass is in fact a wrapper around JsonData
-    """
-    def __init__(self, fname):
-        self._filename = fname
-        js = json.load(open(fname))
-        vars(self).update(js)
-
-        # structure similar to JsonData
-        if self.plot_type == 'indicator_vs_temperature':
-          super().__init__(js['data'], self.temperature_list)
-        elif self.plot_type == 'indicator_vs_timeslices':
-          x = ['{}-{}'.format(y1, y2) for y1, y2 in self.timeslices_list]
-          super().__init__(js['data'], x, vs_time=True)
-        elif self.plot_type == 'indicator_vs_timeline':
-          # super().__init__(js['data'], self.year_list, vs_time=True)
-          logging.info('skip timeline files')
-          return
-        else:
-          logging.warning('unknown file type: '+repr(fname))
-          return
-
-        # # one more level of nesting, define scenarios as attributes
-        # else:
-        #   self._data = {scenario:JsonData(self.data[scenario], x) for scenario in self.climate_scenario_list}
-        #   for scenario in self._data:
-        #     setattr(self, scenario, self._data[scenario])
 
 
 class CubeVariable:
@@ -194,7 +121,7 @@ class TemplateData(CountryStats):
 
 def load_country_data(indicator, study_type, area, input_folder, country_data_folder=None):
     jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
-    variables = {CubeVariable._varname(fname, area):JsonFile(fname) for fname in jsfiles}
+    variables = {CubeVariable._varname(fname, area):JsonFile.load(fname) for fname in jsfiles}
     if country_data_folder is None:
         country_data_folder = 'cube/country_data'
     try:
@@ -366,6 +293,7 @@ def ordinal(num):
     else:
         suffix = {1:'st', 2:'nd', 3:'rd'}.get(num % 10, 'th')
     return '{}{}'.format(num, suffix)
+
 
 
 def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='ISIMIP-projections', 
