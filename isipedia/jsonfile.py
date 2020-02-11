@@ -93,6 +93,8 @@ class JsonFile:
     @classmethod
     def load(cls, fname):
         js = json.load(open(fname))
+        js['filename'] = fname
+        # js['id'] = file_id(fname)os.path.splitext(fname)[0].replace('-','_')  # variable name
         return cls(**js)
 
 
