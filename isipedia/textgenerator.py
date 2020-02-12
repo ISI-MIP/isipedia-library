@@ -249,6 +249,7 @@ class Ranking:
         self.data = data
         self.areas = sorted([area for area in data if not area.startswith('_')])
 
+
     def value(self, area, x, scenario=None):
         index = self.data['_index'].index(x)
         if self.data['_plot_type'] == 'indicator_vs_temperature':
@@ -281,9 +282,23 @@ class Ranking:
         return ordinal(num)
 
 
+
 class MultiRanking(dict):
-    def __getattr__(self, att):
-        return self[att]
+    def __init__(self, ranking=None, area=None):
+        self.area = area 
+        super().__init__(ranking or {})
+
+    def __call__(self, variable, x=None, area=None, method='position', **kwargs):
+        """select the appropriate ranking class and pass on relevant arguments.
+        area defaults to context-specific area
+        """
+        r = self[variable]  # Ranking instance
+        func = getattr(r, method) #  Ranking instance method
+        kwargs['x'] = x
+        if method in ('value', 'number', 'position'):
+            kwargs['area'] = area or self.area
+        return func(**kwargs)
+
 
 
 def ordinal(num):
@@ -291,7 +306,7 @@ def ordinal(num):
         suffix = 'th'
     else:
         suffix = {1:'st', 2:'nd', 3:'rd'}.get(num % 10, 'th')
-    return '{}{}'.format(num, suffix)
+    return '{}<sup>{}</sup>'.format(num, suffix)
 
 
 
@@ -324,6 +339,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
         # tmpl = env.get_template(tmplfile)
+        ranking.area = area # predefine area 
         text = tmpl.render(country=country, world=world, ranking=ranking, lineplot=LinePlot(backend, makefig), **country.variables)
 
         output_folder_local = os.path.join(output_folder, indicator, study_type, area)
