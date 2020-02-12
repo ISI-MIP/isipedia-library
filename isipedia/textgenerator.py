@@ -311,7 +311,7 @@ def ordinal(num):
 
 
 def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='ISIMIP-projections', 
-    templatesdir='templates', country_data_folder=None, fail_on_error=False, backend='mpl', makefig=True):
+    templatesdir='templates', country_data_folder=None, fail_on_error=False, backend='mpl', makefig=True, backends=None):
   
     world = load_country_data(indicator, study_type, 'world', input_folder, country_data_folder=country_data_folder)
 
@@ -340,7 +340,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         tmpl = jinja2.Template(open(tmplfile).read())
         # tmpl = env.get_template(tmplfile)
         ranking.area = area # predefine area 
-        text = tmpl.render(country=country, world=world, ranking=ranking, lineplot=LinePlot(backend, makefig), **country.variables)
+        text = tmpl.render(country=country, world=world, ranking=ranking, lineplot=LinePlot(backend, makefig, backends=backends), **country.variables)
 
         output_folder_local = os.path.join(output_folder, indicator, study_type, area)
         if not os.path.exists(output_folder_local):
@@ -376,6 +376,7 @@ def main():
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
     parser.add_argument('--makefig', action='store_true', help='make figures')
     parser.add_argument('--backend', default='mpl', help='default backend for figures')
+    parser.add_argument('--backends', default=None, help='backends to crunch')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--country-data-dir', default=None, help='templates directory (default: <cube>/country_data)')
@@ -404,7 +405,7 @@ def main():
             try:
                 process_indicator(indicator, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
                     study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir,
-                    fail_on_error=not o.skip_error, makefig=o.makefig, backend=o.backend)
+                    fail_on_error=not o.skip_error, makefig=o.makefig, backend=o.backend, backends=o.backends)
             except Exception as error:
                 raise
                 print(error)

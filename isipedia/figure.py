@@ -116,9 +116,11 @@ class LinePlot:
 	make = _lineplot
 
 
-	def __init__(self, backend, makefig=True):
+	def __init__(self, backend, makefig=True, backends=None):
 		self.backend = backend
 		self.makefig = makefig
+		if backends:
+			self.backends = backends
 
 
 	def __call__(self, data, **kwargs):
