@@ -363,7 +363,7 @@ def main():
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--country-data-dir', default=None, help='templates directory (default: <cube>/country_data)')
-    parser.add_argument('--fail-on-error', action='store_true', help='fail instead of passing when area error')
+    parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
 
     o = parser.parse_args()
     print(o.country_data_dir)
@@ -388,7 +388,7 @@ def main():
             try:
                 process_indicator(indicator, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
                     study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir,
-                    fail_on_error=o.fail_on_error, makefig=o.makefig, backend=o.backend)
+                    fail_on_error=not o.skip_error, makefig=o.makefig, backend=o.backend)
             except Exception as error:
                 raise
                 print(error)
