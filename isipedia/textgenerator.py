@@ -7,7 +7,7 @@ import jinja2
 import logging
 
 from isipedia.jsonfile import JsonFile
-
+from isipedia.figure import LinePlot
 
 
 class CubeVariable:
@@ -18,12 +18,12 @@ class CubeVariable:
         self.studytype = studytype
         self.name = name
 
-    def getmodels(self, cube_path, area=None):
-        """load models list for that variable (should be area independent)
-        """
-        fname = glob.glob(self.jsonfile(area or '*', cube_path))[0]
-        js = json.load(open(fname))
-        return {'climate_model_list': js['climate_model_list'], 'impact_model_list': js['impact_model_list']}
+    # def getmodels(self, cube_path, area=None):
+    #     """load models list for that variable (should be area independent)
+    #     """
+    #     fname = glob.glob(self.jsonfile(area or '*', cube_path))[0]
+    #     js = json.load(open(fname))
+    #     return {'climate_model_list': js['climate_model_list'], 'impact_model_list': js['impact_model_list']}
 
     def jsonfile(self, area, cube_path):
         return os.path.join(cube_path, self.indicator, self.studytype, area, self.name+'_'+area+'.json')
@@ -56,15 +56,15 @@ class CountryStats:
             return float('nan')
         return self.stats[i]['value'] or float('nan')
 
-    @property
-    def pop_density(self):
-        'people/km2'
-        try:
-            i = [e['type'] for e in self.stats].index('POP_DNST')
-        except ValueError as error:
-            # logging.warning(str(error))
-            return float('nan')
-        return self.stats[i]['value'] or float('nan')
+    # @property
+    # def pop_density(self):
+    #     'people/km2'
+    #     try:
+    #         i = [e['type'] for e in self.stats].index('POP_DNST')
+    #     except ValueError as error:
+    #         # logging.warning(str(error))
+    #         return float('nan')
+    #     return self.stats[i]['value'] or float('nan')
 
     @property
     def area(self):
@@ -119,6 +119,7 @@ class TemplateData(CountryStats):
         else:
           return self.name
 
+
 def load_country_data(indicator, study_type, area, input_folder, country_data_folder=None):
     jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
     variables = {CubeVariable._varname(fname, area):JsonFile.load(fname) for fname in jsfiles}
@@ -132,7 +133,6 @@ def load_country_data(indicator, study_type, area, input_folder, country_data_fo
         logging.warning("country stats not found for: "+area)
         # raise
         stats = CountryStats("undefined")
-
 
     # for some reason all numbers are string, convert to float
     for e in stats.stats:
@@ -197,14 +197,13 @@ def _load_ranking_data(var, cube_path, country_names=None):
         area = os.path.basename(os.path.dirname(f))
         if area == 'world':
             continue
-        js = JsonFile(f)
+        js = JsonFile.load(f)
         if n is None:
             n = len(js.x)
             ref = f
             data['_index'] = js.x
         else:
             assert len(js.x) == n, 'not all files have same length, found {}:{} and {}:{}'.format(ref, n, f, len(js.x))
-          
 
         if hasattr(js, 'climate_scenario_list'):
             data[area] = {scenario: js.getarray(scenario) for scenario in js.climate_scenario_list}
@@ -297,7 +296,7 @@ def ordinal(num):
 
 
 def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='ISIMIP-projections', 
-    templatesdir='templates', country_data_folder=None, fail_on_error=False):
+    templatesdir='templates', country_data_folder=None, fail_on_error=False, backend='mpl', makefig=True):
   
     world = load_country_data(indicator, study_type, 'world', input_folder, country_data_folder=country_data_folder)
 
@@ -325,7 +324,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
         # tmpl = env.get_template(tmplfile)
-        text = tmpl.render(country=country, world=world, ranking=ranking, **country.variables)
+        text = tmpl.render(country=country, world=world, ranking=ranking, lineplot=LinePlot(backend, makefig), **country.variables)
 
         output_folder_local = os.path.join(output_folder, indicator, study_type, area)
         if not os.path.exists(output_folder_local):
@@ -359,6 +358,8 @@ def main():
     parser.add_argument('--cube-path', default='cube', help='%(default)s')
     parser.add_argument('--out-cube-path', help='if output shall differs from output')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
+    parser.add_argument('--makefig', action='store_true', help='make figures')
+    parser.add_argument('--backend', default='mpl', help='default backend for figures')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--country-data-dir', default=None, help='templates directory (default: <cube>/country_data)')
@@ -387,7 +388,7 @@ def main():
             try:
                 process_indicator(indicator, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
                     study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir,
-                    fail_on_error=o.fail_on_error)
+                    fail_on_error=o.fail_on_error, makefig=o.makefig, backend=o.backend)
             except Exception as error:
                 raise
                 print(error)
