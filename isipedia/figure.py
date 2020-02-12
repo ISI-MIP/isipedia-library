@@ -64,6 +64,8 @@ def _lineplot(data, x=None, scenario=None, climate=None, impact=None, shading=Fa
 		alpha = 0.5
 		style = '-'
 		marker = ''
+		zorder = 1 if l['scenario'] == 'historical' else 0
+
 		if l['climate'] == 'median' and l['impact'] == 'median':
 			linewidth = 4
 			alpha = 1
@@ -80,9 +82,20 @@ def _lineplot(data, x=None, scenario=None, climate=None, impact=None, shading=Fa
 			style = styles[climate_models.index(l['climate'])]
 			marker = markers[impact_models.index(l['impact'])]
 
+		y, lower, upper = l['y'], l['lower'], l['upper']
+
+		# fill in last data point
+		if data.plot_type == 'indicator_vs_timeslices' and l['scenario'].lower().startswith('rcp'):
+			historical = data.loc('historical', l['climate'], l['impact'])
+			idx = x.index((1981+2000)/2)
+			y[idx] = historical['y'][idx]
+			lower[idx] = historical['lower'][idx]
+			upper[idx] = historical['upper'][idx]
+
 		if shading:
-			ax.fill_between(x, l['lower'], l['upper'], color=color, alpha=0.2)
-		ax.plot(x, l['y'], color=color, linewidth=linewidth, alpha=alpha, marker=marker, linestyle=style)
+			ax.fill_between(x, lower, upper, color=color, alpha=0.2)
+		ax.plot(x, y, color=color, linewidth=linewidth, alpha=alpha, marker=marker, linestyle=style, zorder=zorder)
+
 
 	ax.set_xticks(xticks)
 	# ax.set_xticklabels(xticklabels)
