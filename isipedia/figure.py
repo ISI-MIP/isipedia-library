@@ -215,7 +215,11 @@ def _rankingmap(ranking, x, scenario=None, maskfile='countrymasks.nc', method='n
 		vmax=len(areas) if method=='number' else None)
 
 	# default_title = getattr(ranking, 'plot_label_y','')+' :: ranking: '+method
-	default_title = getattr(ranking, 'plot_label_y','')
+	if ranking.plot_type == 'indicator_vs_temperature':
+		details = 'warming level: {} {}'.format(x, ranking.plot_unit_x)
+	else:
+		details = 'period: {}, scenario: {}'.format(x, {'rcp26':'RCP 2.6', 'rcp45':'RCP 4.5', 'rcp60':'RCP 6', 'rcp85':'RCP 8.5'}.get(scenario, scenario))
+	default_title = getattr(ranking, 'plot_label_y','') + '\n' + details
 	default_label = 'ranking number' if method == 'number' else ('ranking value ({})'.format(getattr(ranking, 'plot_unit_y')))
 
 	ax.set_title(title or default_title)
