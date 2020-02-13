@@ -25,6 +25,70 @@ def figcode(data, **kwargs):
 	# return os.path.splitext(data['filename'])[0].lower()
 
 
+class SuperFig:
+	backends = ['mpl', 'mpld3']
+	make = None
+
+	def __init__(self, backend, makefig=True, backends=None):
+		self.backend = backend
+		self.makefig = makefig
+		if backends:
+			self.backends = backends
+
+
+	def __call__(self, data, **kwargs):
+		if self.makefig:
+			# self.make_figs(data, kwargs, [self.backend])
+			self.make_figs(data, kwargs)
+		return self.insert_cmd(data, kwargs)
+
+
+	def figpath(self, data, kwargs, backend=None, relative=False):
+		ext = {'mpl': 'png', 'mpld3': 'json'}[backend or self.backend]
+		return os.path.join('' if relative else os.path.dirname(data.filename), 'figures', figcode(data, **kwargs) + '.' + ext)
+
+
+	def caption(self, data, caption="", **kwargs):
+		return caption
+
+
+	def insert_cmd(self, data, kwargs, backend=None):
+		backend = backend or self.backend
+		if backend == 'mpl':
+			cmd = '![{}]({})'.format(self.caption(data, **kwargs), self.figpath(data, kwargs, backend, relative=True))
+		elif backend == 'mpld3':
+			cmd = '<div id={}></div>'.format(self.figcode(data, kwargs))
+		else:
+			cmd = '!! Error when inserting figure: {} for backend {}'.format(self.figcode(data, kwargs), backend)
+		return cmd
+
+
+	def make_figs(self, data, kwargs, backends=None):
+		"custom make figs that reuse same figure"
+		backends = backends or self.backends
+		if not backends : return
+		import matplotlib.pyplot as plt
+		fig, axes = self.make(data, **kwargs)
+		for backend in backends:		
+			if backend == 'mpl':
+				fpath = _maybe_createdir(self.figpath(data, kwargs, 'mpl'))
+				fig.savefig(fpath, dpi=100)
+			elif backend == 'mpld3':
+				import mpld3
+				js = mpld3.fig_to_dict(fig)
+				fpath = _maybe_createdir(self.figpath(data, kwargs, 'mpld3'))
+				json.dump(js, open(fpath, 'w'), cls=NpEncoder)
+		plt.close(fig)
+
+
+def _maybe_createdir(path):
+	dirname = os.path.dirname(path)
+	if not os.path.exists(dirname):
+		os.makedirs(dirname)
+	return path
+
+
+
 def _lineplot(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
 	import matplotlib.pyplot as plt
 	import numpy as np
@@ -111,62 +175,70 @@ def _lineplot(data, x=None, scenario=None, climate=None, impact=None, shading=Fa
 	return fig, ax
 
 
-class LinePlot:
-	backends = ['mpl', 'mpld3']
-	make = _lineplot
+
+def _rankingmap(ranking, x, scenario=None, maskfile='countrymasks.nc', method='number', title='', label=''):
+	"""
+	ranking: Ranking instance
+	method: "number" (default) or "value"
+	"""
+	import matplotlib.pyplot as plt
+	import numpy as np
+	import netCDF4 as nc
+
+	if method not in ['number', 'value']:
+		raise ValueError('method must be "number" or "value"')
+
+	areas = ranking.areas
+
+	with nc.Dataset(maskfile) as ds:
+		lat, lon = ds['lat'][:], ds['lon'][:]
+		ni, nj = lat.size, lon.size
+		data = np.empty((ni, nj), dtype=int if method == 'number' else float)
+		mask = np.ones((ni, nj), dtype=bool)  # undefined areas
+		for area in areas:
+			if 'm_'+area not in ds.variables:
+				print('! rankingmap::', area, 'not found in counrty masks')
+				continue
+
+			value = getattr(ranking, method)(area, x, scenario)
+			if value == 'undefined':
+				print('! rankingmap::value', area, 'undefined')
+				continue
+
+			m = ds['m_'+area][:] > 0
+			data[m] = value
+			mask[m] = False 
+
+	fig, ax = plt.subplots(1,1)
+	h = ax.imshow(np.ma.array(data, mask=mask), extent=[-180, 180, -90, 90], 
+		cmap=plt.cm.viridis_r if method == "number" else plt.cm.viridis, 
+		vmax=len(areas) if method=='number' else None)
+
+	# default_title = getattr(ranking, 'plot_label_y','')+' :: ranking: '+method
+	default_title = getattr(ranking, 'plot_label_y','')
+	default_label = 'ranking number' if method == 'number' else ('ranking value ({})'.format(getattr(ranking, 'plot_unit_y')))
+
+	ax.set_title(title or default_title)
+	plt.colorbar(h, ax=ax, orientation='horizontal', label=label or default_label)	
+
+	return fig, ax
 
 
-	def __init__(self, backend, makefig=True, backends=None):
-		self.backend = backend
-		self.makefig = makefig
-		if backends:
-			self.backends = backends
+
+class LinePlot(SuperFig):
+	def make(self, *args, **kwargs):
+		return _lineplot(*args, **kwargs)
 
 
-	def __call__(self, data, **kwargs):
-		if self.makefig:
-			# self.make_figs(data, kwargs, [self.backend])
-			self.make_figs(data, kwargs)
-		return self.insert_cmd(data, kwargs)
+class RankingMap(SuperFig):
+	make = _rankingmap
 
+	def __init__(self, ranking, backend, makefig=True, backends=None):
+		super().__init__(backend, makefig, backends)
+		self.ranking = ranking
 
-	def figpath(self, data, kwargs, backend=None, relative=False):
-		ext = {'mpl': 'png', 'mpld3': 'json'}[backend or self.backend]
-		return os.path.join('' if relative else os.path.dirname(data.filename), 'figures', figcode(data, **kwargs) + '.' + ext)
+	def __call__(self, variable, x, **kwargs):
+		return super().__call__(self.ranking[variable], x=x, **kwargs)
 
-
-	def caption(self, data, caption="", **kwargs):
-		return caption
-
-
-	def insert_cmd(self, data, kwargs, backend=None):
-		backend = backend or self.backend
-		if backend == 'mpl':
-			return '![{}]({})'.format(self.caption(data, *kwargs), self.figpath(data, kwargs, backend, relative=True))
-		elif backend == 'mpld3':
-			return '<div id={}></div>'.format(self.figcode(data, kwargs))
-
-
-	def make_figs(self, data, kwargs, backends=None):
-		"custom make figs that reuse same figure"
-		backends = backends or self.backends
-		if not backends : return
-		import matplotlib.pyplot as plt
-		fig, axes = _lineplot(data, **kwargs)
-		for backend in backends:		
-			if backend == 'mpl':
-				fpath = _maybe_createdir(self.figpath(data, kwargs, 'mpl'))
-				fig.savefig(fpath, dpi=100)
-			elif backend == 'mpld3':
-				import mpld3
-				js = mpld3.fig_to_dict(fig)
-				fpath = _maybe_createdir(self.figpath(data, kwargs, 'mpld3'))
-				json.dump(js, open(fpath, 'w'), cls=NpEncoder)
-		plt.close(fig)
-
-
-def _maybe_createdir(path):
-	dirname = os.path.dirname(path)
-	if not os.path.exists(dirname):
-		os.makedirs(dirname)
-	return path
+	def make(self, *args, **kwargs):
+		return _rankingmap(*args, **kwargs)

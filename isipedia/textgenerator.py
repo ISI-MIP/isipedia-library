@@ -7,7 +7,7 @@ import jinja2
 import logging
 
 from isipedia.jsonfile import JsonFile
-from isipedia.figure import LinePlot
+from isipedia.figure import LinePlot, RankingMap
 
 
 class CubeVariable:
@@ -316,6 +316,10 @@ class MultiRanking(dict):
         return func(**kwargs)
 
 
+    # def map(self, variable, x=None, scenario=None, title='', **kwargs):
+    #     return self[variable].map(x, scenario, title=title or variable, **kwargs)
+
+
 
 def ordinal(num):
     if 10 <= num % 100 <= 20:
@@ -355,7 +359,10 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         tmpl = jinja2.Template(open(tmplfile).read())
         # tmpl = env.get_template(tmplfile)
         ranking.area = area # predefine area 
-        text = tmpl.render(country=country, world=world, ranking=ranking, lineplot=LinePlot(backend, makefig, backends=backends), **country.variables)
+        text = tmpl.render(country=country, world=world, ranking=ranking, 
+            lineplot=LinePlot(backend, makefig, backends=backends), 
+            rankingmap=RankingMap(ranking, backend, makefig, backends=backends), 
+            **country.variables)
 
         output_folder_local = os.path.join(output_folder, indicator, study_type, area)
         if not os.path.exists(output_folder_local):
