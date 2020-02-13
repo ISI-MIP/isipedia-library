@@ -173,7 +173,7 @@ def select_template(indicator, area=None, templatesdir='templates'):
 #     autoescape=select_autoescape(['html', 'xml'])
 # )
 
-def _load_ranking_data(var, cube_path, country_names=None):
+def calculate_ranking(var, cube_path, country_names=None):
     """load ranking data"""
     if country_names is None:
         files = sorted(glob.glob(var.jsonfile('*', cube_path)))
@@ -209,7 +209,10 @@ def _load_ranking_data(var, cube_path, country_names=None):
             data[area] = {scenario: js.getarray(scenario) for scenario in js.climate_scenario_list}
         else:
             data[area] = {None: js.getarray()}
-    data['_plot_type'] = js.plot_type
+    # data['_plot_type'] = js.plot_type
+    # data['_filename'] = var.jsonfile('world', cube_path)  # used in ranking map next to world folder...
+    js = JsonFile.load(var.jsonfile('world', cube_path))  # load world-level and copy metadata
+    data['_metadata'] = {k:v for k,v in js._js.items() if k != 'data'}
 
     return data
 
@@ -222,7 +225,8 @@ def load_ranking_config(indicator, cube_path):
 
 
 def ranking_file(indicator, category, variable, cube_path):
-    return os.path.join(cube_path, indicator, 'ranking.{}.{}.{}.json'.format(indicator, category, variable))
+    # return os.path.join(cube_path, indicator, 'ranking.{}.{}.{}.json'.format(indicator, category, variable))
+    return os.path.join(cube_path, indicator, category, 'world', 'ranking', 'ranking.{}.json'.format(variable))
 
 
 def preprocess_ranking(indicator, cube_path, out_cube_path=None, country_names=None):
@@ -236,7 +240,7 @@ def preprocess_ranking(indicator, cube_path, out_cube_path=None, country_names=N
             category = study['directory']
             print(indicator, category, name)
             var = CubeVariable(indicator, category, name)
-            data = _load_ranking_data(var, cube_path, country_names=country_names)
+            data = calculate_ranking(var, cube_path, country_names=country_names)
             fname = ranking_file(indicator, category, name, out_cube_path)
             dname = os.path.dirname(fname)
             if not os.path.exists(dname):
@@ -248,18 +252,21 @@ class Ranking:
     def __init__(self, data):
         self.data = data
         self.areas = sorted([area for area in data if not area.startswith('_')])
+        # self.filename = data['_filename']  # for the figure...
 
+    def __getattr__(self, name):
+        return self.data['_metadata'][name] # e.g. filename, plot_type (same as JsonFile)
 
     def value(self, area, x, scenario=None):
         index = self.data['_index'].index(x)
-        if self.data['_plot_type'] == 'indicator_vs_temperature':
+        if self.plot_type == 'indicator_vs_temperature':
             return self.data[area]['null'][index]
         else:
             return self.data[area][scenario][index]
 
     def values(self, x, scenario=None):
         index = self.data['_index'].index(x)
-        if self.data['_plot_type'] == 'indicator_vs_temperature':
+        if self.plot_type == 'indicator_vs_temperature':
             values = [self.data[area]['null'][index] for area in self.areas]
         else:
             values = [self.data[area][scenario][index] for area in self.areas]
@@ -281,6 +288,15 @@ class Ranking:
         num = self.number(area, x, scenario)
         return ordinal(num)
 
+
+    @classmethod
+    def load(cls, fname):
+        ranking_data = json.load(open(fname))
+        return cls(ranking_data)
+
+
+    # def map(self, x, scenario=None, **kwargs):
+    #     return RankingMap(self, x, scenario, **kwargs)
 
 
 class MultiRanking(dict):
@@ -330,8 +346,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
                 if not os.path.exists(fname):
                     logging.warning('ranking file does not exist: '+fname)
                     continue
-                ranking_data = json.load(open(fname))
-                ranking[name.replace('-','_')] = Ranking(ranking_data)
+                ranking[name.replace('-','_')] = Ranking.load(fname)
 
 
     def process_area(area):
