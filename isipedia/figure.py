@@ -306,12 +306,19 @@ def _countrymap(mapdata, countrymasksnc, jsfile, x=None, scenario=None, climate=
     localmap = bnds.extract(worldmap)
     if 'm_'+area in countrymasksnc.variables:
         mask = bnds.extract(countrymasksnc['m_'+area]) > 0
+    elif area == 'world':
+        mask = np.zeros_like(worldmap, dtype=bool)
+        for k in countrymasksnc.variables:
+            if not k.startswith('m_'): 
+                continue
+            mask[countrymasksnc[k][:]>0] = True
     else:
         mask = np.ones_like(worldmap, dtype=bool)
 
 
     fig, ax = plt.subplots(1,1)
-    h2 = ax.imshow(localmap, extent=bnds.extent, alpha=0.5) # transparency for outside values
+    if area != 'world':
+        h2 = ax.imshow(localmap, extent=bnds.extent, alpha=0.5) # transparency for outside values
     h = ax.imshow(np.ma.array(localmap, mask=~mask), extent=bnds.extent)
 
     # default_title = getattr(ranking, 'plot_label_y','')+' :: ranking: '+method
