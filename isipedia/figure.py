@@ -13,70 +13,64 @@ class NpEncoder(json.JSONEncoder):
             return super(NpEncoder).default(obj)
 
 
-def _hashsum(string, l=6):
+def _hashsum(kwargs, l=6):
+    string = json.dumps(kwargs, sort_keys=True)    
     return hashlib.sha1(string.encode()).hexdigest()[:l] 
 
 
-def figcode(data, **kwargs):
-    "code based on file name and figure arguments"
-    kwargs['filename'] = data.filename
-    string = json.dumps(kwargs, sort_keys=True)
-    return _hashsum(string)
-    # return os.path.splitext(data['filename'])[0].lower()
-
-
 class SuperFig:
-    backends = ['mpl', 'mpld3']
+    backends = ['mpl']
     make = None
 
-    def __init__(self, backend, makefig=True, backends=None):
+    def __init__(self, folder, backend, makefig=True, backends=None):
+        self.folder = folder
         self.backend = backend
         self.makefig = makefig
         if backends:
             self.backends = backends
 
+    def figcode(self, *args, **kwargs):
+        "code based on file name and figure arguments"
+        kwargs['args'] = args
+        return _hashsum(kwargs)
 
-    def __call__(self, data, **kwargs):
+    def __call__(self, *args, **kwargs):
         if self.makefig:
             # self.make_figs(data, kwargs, [self.backend])
-            self.make_figs(data, kwargs)
-        return self.insert_cmd(data, kwargs)
+            self.make_figs(args, kwargs)
+        return self.insert_cmd(args, kwargs)
 
 
-    def figpath(self, data, kwargs, backend=None, relative=False):
+    def figpath(self, args, kwargs, backend=None, relative=False):
         ext = {'mpl': 'png', 'mpld3': 'json'}[backend or self.backend]
-        return os.path.join('' if relative else os.path.dirname(data.filename), 'figures', figcode(data, **kwargs) + '.' + ext)
+        return os.path.join('' if relative else self.folder, 'figures', self.figcode(*args, **kwargs) + '.' + ext)
 
-
-    def caption(self, data, caption="", **kwargs):
-        return caption
-
-
-    def insert_cmd(self, data, kwargs, backend=None):
+    def insert_cmd(self, args, kwargs, backend=None):
         backend = backend or self.backend
         if backend == 'mpl':
-            cmd = '![{}]({})'.format(self.caption(data, **kwargs), self.figpath(data, kwargs, backend, relative=True))
+            cmd = '![{}]({})'.format(kwargs.get('caption',''), self.figpath(args, kwargs, backend, relative=True))
         elif backend == 'mpld3':
-            cmd = '<div id={}></div>'.format(self.figcode(data, kwargs))
+            cmd = '<div id={}>{}</div>'.format(self.figcode(*args, **kwargs), kwargs.get('caption'))
         else:
-            cmd = '!! Error when inserting figure: {} for backend {}'.format(self.figcode(data, kwargs), backend)
+            cmd = '!! Error when inserting figure: {} for backend {}'.format(self.figcode(*args, **kwargs), backend)
         return cmd
 
 
-    def make_figs(self, data, kwargs, backends=None):
+    def make_figs(self, args, kwargs, backends=None):
         "custom make figs that reuse same figure"
         backends = backends or self.backends
         if not backends : return
         import matplotlib.pyplot as plt
-        fig, axes = self.make(data, **kwargs)
+        caption = kwargs.pop('caption','')
+        fig, axes = self.make(*args, **kwargs)
         for backend in backends:        
             if backend == 'mpl':
-                fpath = _maybe_createdir(self.figpath(data, kwargs, 'mpl'))
+                fpath = _maybe_createdir(self.figpath(args, kwargs, 'mpl'))
                 fig.savefig(fpath, dpi=100)
             elif backend == 'mpld3':
                 import mpld3
                 js = mpld3.fig_to_dict(fig)
-                fpath = _maybe_createdir(self.figpath(data, kwargs, 'mpld3'))
+                fpath = _maybe_createdir(self.figpath(args, kwargs, 'mpld3'))
                 json.dump(js, open(fpath, 'w'), cls=NpEncoder)
         plt.close(fig)
 
@@ -176,38 +170,40 @@ def _lineplot(data, x=None, scenario=None, climate=None, impact=None, shading=Fa
 
 
 
-def _rankingmap(ranking, x, scenario=None, maskfile='countrymasks.nc', method='number', title='', label=''):
+def _rankingmap(countrymasksnc, ranking, x, scenario=None, method='number', title='', label=''):
     """
+    countrymasksnc : nc.Dataset instance of countrymasks.nc
     ranking: Ranking instance
     method: "number" (default) or "value"
     """
     import matplotlib.pyplot as plt
     import numpy as np
-    import netCDF4 as nc
 
     if method not in ['number', 'value']:
         raise ValueError('method must be "number" or "value"')
 
     areas = ranking.areas
 
-    with nc.Dataset(maskfile) as ds:
-        lat, lon = ds['lat'][:], ds['lon'][:]
-        ni, nj = lat.size, lon.size
-        data = np.empty((ni, nj), dtype=int if method == 'number' else float)
-        mask = np.ones((ni, nj), dtype=bool)  # undefined areas
-        for area in areas:
-            if 'm_'+area not in ds.variables:
-                print('! rankingmap::', area, 'not found in counrty masks')
-                continue
+    ds = countrymasksnc
 
-            value = getattr(ranking, method)(area, x, scenario)
-            if value == 'undefined':
-                print('! rankingmap::value', area, 'undefined')
-                continue
+    lat, lon = ds['lat'][:], ds['lon'][:]
+    ni, nj = lat.size, lon.size
+    data = np.empty((ni, nj), dtype=int if method == 'number' else float)
+    mask = np.ones((ni, nj), dtype=bool)  # undefined areas
+    for area in areas:
+        if 'm_'+area not in ds.variables:
+            print('! rankingmap::', area, 'not found in counrty masks')
+            continue
 
-            m = ds['m_'+area][:] > 0
-            data[m] = value
-            mask[m] = False 
+        value = getattr(ranking, method)(area, x, scenario)
+        if value == 'undefined':
+            print('! rankingmap::value', area, 'undefined')
+            continue
+
+        m = ds['m_'+area][:] > 0
+        data[m] = value
+        mask[m] = False 
+
 
     fig, ax = plt.subplots(1,1)
     h = ax.imshow(np.ma.array(data, mask=mask), extent=[-180, 180, -90, 90], 
@@ -228,21 +224,151 @@ def _rankingmap(ranking, x, scenario=None, maskfile='countrymasks.nc', method='n
     return fig, ax
 
 
+class MapBounds:
+    def __init__(self, indices, extent, splitted=False):
+        self.indices = indices
+        self.extent = extent
+        self.splitted = splitted
+
+    @classmethod
+    def load(cls, fname):
+        bounds = json.load(open(fname))
+        b = bounds['indices']
+        indices = b['left'], b['right'], b['bottom'], b['top']
+        b = bounds['bounds']
+        extent = b['left'], b['right'], b['bottom'], b['top']
+        return cls(indices, extent, bounds['splitted'])
+
+    def extract(self, x):
+        l, r, b, t = self.indices
+        if self.splitted:  # [0, 360]
+            ni, nj = x.shape
+            x = np.concatenate((x[:, -nj//2:], x[:, :nj//2]), axis=1)
+        return x[t:b+1, l:r+1]
+
+
+class MapData:
+    """lazy loading of map data
+    """
+    def __init__(self, indicator, studytype, cube_path, country_data_path):
+        self.indicator = indicator
+        self.studytype = studytype
+        self.cube_path = cube_path
+        self.country_data_path = country_data_path
+        self._data = {}
+        self._areas = {}
+
+
+    def csvpath(self, name, x, scenario=None, climate=None, impact=None):
+        mapfile = '{scenario}_{climate}_{impact}_{x}.csv'.format(
+            scenario=scenario or 'all', 
+            climate=climate or 'median',
+            impact=impact or 'median',
+            x='{:.1f}'.format(x) if type(x) is not str else x)
+        return os.path.join(self.cube_path, self.indicator, self.studytype, 'world' ,'maps', name, mapfile)
+
+
+    def loadcsv(self, name, x, scenario=None, climate=None, impact=None, fill_value=0):
+        mpath = self.csvpath(name, x, scenario, climate, impact)
+        x = np.genfromtxt(mpath, delimiter=',')
+        if fill_value is not None:
+            x[np.isnan(x)] = fill_value
+        return x
+
+
+    def bounds(self, area):
+        if area not in self._areas:
+            boundspath = os.path.join(self.country_data_path, area, 'bounds.json')
+            self._areas[area] = MapBounds.load(boundspath)
+        return self._areas[area]
+
+
+    def get(self, name, x, scenario=None, climate=None, impact=None):
+        if name not in self._data:
+            self._data[name] = self.loadcsv(name, x, scenario, climate, impact)
+        return self._data[name]
+
+
+def _countrymap(mapdata, countrymasksnc, jsfile, x=None, scenario=None, climate=None, impact=None, title='', label=''):
+    """
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    area = jsfile.area
+
+    name, ext = os.path.splitext(os.path.basename(jsfile.filename))
+    if name.endswith(area):
+        name = name[:-len(area)-1]
+
+    bnds = mapdata.bounds(area)
+    worldmap = mapdata.get(name, x, scenario, climate, impact)
+    localmap = bnds.extract(worldmap)
+    if 'm_'+area in countrymasksnc.variables:
+        mask = bnds.extract(countrymasksnc['m_'+area]) > 0
+    else:
+        mask = np.ones_like(worldmap, dtype=bool)
+
+
+    fig, ax = plt.subplots(1,1)
+    h2 = ax.imshow(localmap, extent=bnds.extent, alpha=0.5) # transparency for outside values
+    h = ax.imshow(np.ma.array(localmap, mask=~mask), extent=bnds.extent)
+
+    # default_title = getattr(ranking, 'plot_label_y','')+' :: ranking: '+method
+    if jsfile.plot_type == 'indicator_vs_temperature':
+        details = 'warming level: {} {}'.format(x, jsfile.plot_unit_x)
+    else:
+        details = 'period: {}, scenario: {}'.format(x, {'rcp26':'RCP 2.6', 'rcp45':'RCP 4.5', 'rcp60':'RCP 6', 'rcp85':'RCP 8.5'}.get(scenario, scenario))
+    if climate: details += ', climate: {}'.format(climate)
+    if impact: details += ', impact: {}'.format(impact)
+    default_title = getattr(jsfile, 'plot_label_y','') + '\n' + details
+    default_label = getattr(jsfile, 'plot_unit_y')
+
+    ax.set_title(title or default_title)
+    plt.colorbar(h, ax=ax, orientation='horizontal', label=label or default_label)
+
+    return fig, ax
+
 
 class LinePlot(SuperFig):
+
     def make(self, *args, **kwargs):
         return _lineplot(*args, **kwargs)
 
+    def figcode(self, jsfile, **kwargs):
+        kwargs['filename'] = jsfile.filename
+        return _hashsum(kwargs)
 
-class RankingMap(SuperFig):
-    make = _rankingmap
 
-    def __init__(self, ranking, backend, makefig=True, backends=None):
-        super().__init__(backend, makefig, backends)
-        self.ranking = ranking
+class CountryMap(SuperFig):
 
-    def __call__(self, variable, x, **kwargs):
-        return super().__call__(self.ranking[variable], x=x, **kwargs)
+    def __init__(self, mapdata, countrymasksnc, folder, backend, makefig=True, backends=None):
+        self.mapdata = mapdata
+        self.countrymasksnc = countrymasksnc
+        super().__init__(folder, backend, makefig, backends)
 
     def make(self, *args, **kwargs):
-        return _rankingmap(*args, **kwargs)
+        return _countrymap(self.mapdata, self.countrymasksnc, *args, **kwargs)
+
+    def figcode(self, jsfile, x, **kwargs):
+        kwargs['x'] = x
+        kwargs['filename'] = jsfile.filename
+        return _hashsum(kwargs)
+
+
+
+class RankingMap(SuperFig):
+
+    def __init__(self, ranking, countrymasksnc, folder, backend, makefig=True, backends=None):
+        super().__init__(folder, backend, makefig, backends)
+        self.ranking = ranking
+        self.countrymasksnc = countrymasksnc
+
+
+    def make(self, variable, *args, **kwargs):
+        return _rankingmap(self.countrymasksnc, self.ranking[variable], *args, **kwargs)
+
+    def figcode(self, variable, x, **kwargs):
+        kwargs['x'] = x
+        kwargs['variable'] = variable   # string
+        return _hashsum(kwargs)

@@ -1,5 +1,6 @@
 """Read nested json file from the cube
 """
+import os
 import json
 import itertools
 import copy
@@ -26,6 +27,17 @@ class JsonFile:
         self.axes[1].append('median')
         self.axes[2].append('median')
         self.shape = [len(ax) for ax in self.axes]  # for conversion to cube if needed
+
+
+    @property
+    def shortname(self):
+        ' determine variable name from json file name '
+        fname = self.filename
+        name, ext = os.path.splitext(os.path.basename(fname))
+        area = self.area
+        if name.endswith(area):
+            name = name[:-len(area)-1]
+        return name.replace('-','_')
 
 
     @property

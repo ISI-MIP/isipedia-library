@@ -5,9 +5,10 @@ import os
 import glob
 import jinja2
 import logging
+import netCDF4 as nc
 
 from isipedia.jsonfile import JsonFile
-from isipedia.figure import LinePlot, RankingMap
+from isipedia.figure import LinePlot, CountryMap, RankingMap, MapData
 
 
 class CubeVariable:
@@ -93,6 +94,138 @@ class CountryStats:
         return cls(js['name'], js['type'], js['sub-countries'], stats=js['stats'])
 
 
+
+def calculate_ranking(var, cube_path, country_names=None):
+    """load ranking data"""
+    if country_names is None:
+        files = sorted(glob.glob(var.jsonfile('*', cube_path)))
+        logging.info('found {} matching files'.format(len(files)))
+
+        # check
+        country_dirs = sorted(glob.glob(os.path.join(*os.path.split(var.jsonfile('*', cube_path))[:-1])+'/'))
+        if len(country_dirs) != len(files):
+            logging.warning('found {} country dirs, but {} ranking-variable files'.format(len(country_dirs), len(files)))
+            areas_files = [os.path.basename(os.path.dirname(d)) for d in files]
+            areas_dir = [os.path.basename(d) for d in country_dirs]
+            print('set difference:', set(areas_dir).difference(set(areas_files)))
+
+    else:
+        files = [var.jsonfile(area, cube_path) for area in country_names]
+
+    n = None
+    ref = None
+    data = {}
+    for f in files:
+        area = os.path.basename(os.path.dirname(f))
+        if area == 'world':
+            continue
+        js = JsonFile.load(f)
+        if n is None:
+            n = len(js.x)
+            ref = f
+            data['_index'] = js.x
+        else:
+            assert len(js.x) == n, 'not all files have same length, found {}:{} and {}:{}'.format(ref, n, f, len(js.x))
+
+        if hasattr(js, 'climate_scenario_list'):
+            data[area] = {scenario: js.getarray(scenario) for scenario in js.climate_scenario_list}
+        else:
+            data[area] = {None: js.getarray()}
+    # data['_plot_type'] = js.plot_type
+    # data['_filename'] = var.jsonfile('world', cube_path)  # used in ranking map next to world folder...
+    js = JsonFile.load(var.jsonfile('world', cube_path))  # load world-level and copy metadata
+    data['_metadata'] = {k:v for k,v in js._js.items() if k != 'data'}
+
+    return data
+
+
+def load_indicator_config(indicator, cube_path):
+    cfgfile = os.path.join(cube_path, indicator, 'config.json')
+    if not os.path.exists(cfgfile):
+        logging.warn('no config file present for '+indicator)
+    return json.load(open(cfgfile))
+
+
+def ranking_file(indicator, category, variable, cube_path):
+    # return os.path.join(cube_path, indicator, 'ranking.{}.{}.{}.json'.format(indicator, category, variable))
+    return os.path.join(cube_path, indicator, category, 'world', 'ranking', 'ranking.{}.json'.format(variable))
+
+
+def preprocess_ranking(indicator, cube_path, out_cube_path=None, country_names=None):
+    if out_cube_path is None:
+        out_cube_path = cube_path
+
+    cfg = load_indicator_config(indicator, cube_path)
+
+    for study in cfg['study-types']:
+        for name in study['ranking-files']:
+            category = study['directory']
+            print(indicator, category, name)
+            var = CubeVariable(indicator, category, name)
+            data = calculate_ranking(var, cube_path, country_names=country_names)
+            fname = ranking_file(indicator, category, name, out_cube_path)
+            dname = os.path.dirname(fname)
+            if not os.path.exists(dname):
+                os.makedirs(dname)
+            json.dump(data, open(fname, 'w'))
+
+
+
+def ordinal(num):
+    if 10 <= num % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1:'st', 2:'nd', 3:'rd'}.get(num % 10, 'th')
+    return '{}<sup>{}</sup>'.format(num, suffix)
+
+
+class Ranking:
+    def __init__(self, data):
+        self.data = data
+        self.areas = sorted([area for area in data if not area.startswith('_')])
+        # self.filename = data['_filename']  # for the figure...
+
+    def __getattr__(self, name):
+        return self.data['_metadata'][name] # e.g. filename, plot_type (same as JsonFile)
+
+    def value(self, area, x, scenario=None):
+        index = self.data['_index'].index(x)
+        if self.plot_type == 'indicator_vs_temperature':
+            return self.data[area]['null'][index]
+        else:
+            return self.data[area][scenario][index]
+
+    def values(self, x, scenario=None):
+        index = self.data['_index'].index(x)
+        if self.plot_type == 'indicator_vs_temperature':
+            values = [self.data[area]['null'][index] for area in self.areas]
+        else:
+            values = [self.data[area][scenario][index] for area in self.areas]
+        return values
+
+    def sorted_areas(self, x, scenario=None):
+        values = self.values(x, scenario)
+        pairs = sorted([(v if v is not None else -99e9, area) for v, area in zip(values, self.areas)], key=lambda x: x[0])
+        return [area for v, area in pairs[::-1]]
+
+    def number(self, area, x, scenario=None):
+        if self.value(area, x, scenario) is None:
+            return 'undefined'
+        return self.sorted_areas(x, scenario).index(area) + 1
+
+    def position(self, area, x, scenario=None):
+        if self.value(area, x, scenario) is None:
+            return 'undefined'
+        num = self.number(area, x, scenario)
+        return ordinal(num)
+
+
+    @classmethod
+    def load(cls, fname):
+        ranking_data = json.load(open(fname))
+        return cls(ranking_data)
+
+
 class TemplateData(CountryStats):
     """template data accessible for an author
     """
@@ -173,127 +306,6 @@ def select_template(indicator, area=None, templatesdir='templates'):
 #     autoescape=select_autoescape(['html', 'xml'])
 # )
 
-def calculate_ranking(var, cube_path, country_names=None):
-    """load ranking data"""
-    if country_names is None:
-        files = sorted(glob.glob(var.jsonfile('*', cube_path)))
-        logging.info('found {} matching files'.format(len(files)))
-
-        # check
-        country_dirs = sorted(glob.glob(os.path.join(*os.path.split(var.jsonfile('*', cube_path))[:-1])+'/'))
-        if len(country_dirs) != len(files):
-            logging.warning('found {} country dirs, but {} ranking-variable files'.format(len(country_dirs), len(files)))
-            areas_files = [os.path.basename(os.path.dirname(d)) for d in files]
-            areas_dir = [os.path.basename(d) for d in country_dirs]
-            print('set difference:', set(areas_dir).difference(set(areas_files)))
-
-    else:
-        files = [var.jsonfile(area, cube_path) for area in country_names]
-
-    n = None
-    ref = None
-    data = {}
-    for f in files:
-        area = os.path.basename(os.path.dirname(f))
-        if area == 'world':
-            continue
-        js = JsonFile.load(f)
-        if n is None:
-            n = len(js.x)
-            ref = f
-            data['_index'] = js.x
-        else:
-            assert len(js.x) == n, 'not all files have same length, found {}:{} and {}:{}'.format(ref, n, f, len(js.x))
-
-        if hasattr(js, 'climate_scenario_list'):
-            data[area] = {scenario: js.getarray(scenario) for scenario in js.climate_scenario_list}
-        else:
-            data[area] = {None: js.getarray()}
-    # data['_plot_type'] = js.plot_type
-    # data['_filename'] = var.jsonfile('world', cube_path)  # used in ranking map next to world folder...
-    js = JsonFile.load(var.jsonfile('world', cube_path))  # load world-level and copy metadata
-    data['_metadata'] = {k:v for k,v in js._js.items() if k != 'data'}
-
-    return data
-
-
-def load_ranking_config(indicator, cube_path):
-    cfgfile = os.path.join(cube_path, indicator, 'config.json')
-    if not os.path.exists(cfgfile):
-        logging.warn('no config file present for '+indicator)
-    return json.load(open(cfgfile))
-
-
-def ranking_file(indicator, category, variable, cube_path):
-    # return os.path.join(cube_path, indicator, 'ranking.{}.{}.{}.json'.format(indicator, category, variable))
-    return os.path.join(cube_path, indicator, category, 'world', 'ranking', 'ranking.{}.json'.format(variable))
-
-
-def preprocess_ranking(indicator, cube_path, out_cube_path=None, country_names=None):
-    if out_cube_path is None:
-        out_cube_path = cube_path
-
-    cfg = load_ranking_config(indicator, cube_path)
-
-    for study in cfg['study-types']:
-        for name in study['ranking-files']:
-            category = study['directory']
-            print(indicator, category, name)
-            var = CubeVariable(indicator, category, name)
-            data = calculate_ranking(var, cube_path, country_names=country_names)
-            fname = ranking_file(indicator, category, name, out_cube_path)
-            dname = os.path.dirname(fname)
-            if not os.path.exists(dname):
-                os.makedirs(dname)
-            json.dump(data, open(fname, 'w'))
-
-
-class Ranking:
-    def __init__(self, data):
-        self.data = data
-        self.areas = sorted([area for area in data if not area.startswith('_')])
-        # self.filename = data['_filename']  # for the figure...
-
-    def __getattr__(self, name):
-        return self.data['_metadata'][name] # e.g. filename, plot_type (same as JsonFile)
-
-    def value(self, area, x, scenario=None):
-        index = self.data['_index'].index(x)
-        if self.plot_type == 'indicator_vs_temperature':
-            return self.data[area]['null'][index]
-        else:
-            return self.data[area][scenario][index]
-
-    def values(self, x, scenario=None):
-        index = self.data['_index'].index(x)
-        if self.plot_type == 'indicator_vs_temperature':
-            values = [self.data[area]['null'][index] for area in self.areas]
-        else:
-            values = [self.data[area][scenario][index] for area in self.areas]
-        return values
-
-    def sorted_areas(self, x, scenario=None):
-        values = self.values(x, scenario)
-        pairs = sorted([(v if v is not None else -99e9, area) for v, area in zip(values, self.areas)], key=lambda x: x[0])
-        return [area for v, area in pairs[::-1]]
-
-    def number(self, area, x, scenario=None):
-        if self.value(area, x, scenario) is None:
-            return 'undefined'
-        return self.sorted_areas(x, scenario).index(area) + 1
-
-    def position(self, area, x, scenario=None):
-        if self.value(area, x, scenario) is None:
-            return 'undefined'
-        num = self.number(area, x, scenario)
-        return ordinal(num)
-
-
-    @classmethod
-    def load(cls, fname):
-        ranking_data = json.load(open(fname))
-        return cls(ranking_data)
-
 
     # def map(self, x, scenario=None, **kwargs):
     #     return RankingMap(self, x, scenario, **kwargs)
@@ -321,16 +333,20 @@ class MultiRanking(dict):
 
 
 
-def ordinal(num):
-    if 10 <= num % 100 <= 20:
-        suffix = 'th'
-    else:
-        suffix = {1:'st', 2:'nd', 3:'rd'}.get(num % 10, 'th')
-    return '{}<sup>{}</sup>'.format(num, suffix)
+class StudyType:
+    def __init__(self, code, name='', description=''):
+        self.code = code
+        self.name = name or code.replace('-',' ').capitalize()
+        self.description = description or ''
 
 
+class Indicator:
+    def __init__(self, code, name):
+        self.code = code
+        self.name = name
 
-def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='ISIMIP-projections', 
+
+def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='future-projections',
     templatesdir='templates', country_data_folder=None, fail_on_error=False, backend='mpl', makefig=True, backends=None):
   
     world = load_country_data(indicator, study_type, 'world', input_folder, country_data_folder=country_data_folder)
@@ -340,18 +356,33 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         country_names = sorted(os.listdir (os.path.join(input_folder, indicator, study_type)))
         country_names = [c for c in country_names if os.path.exists(os.path.join(country_data_folder, c))]
 
-    # load country ranking
-    cfg = load_ranking_config(indicator, output_folder)
-    ranking = MultiRanking()
-    for study in cfg['study-types']:
-        if study['directory'] == study_type:
-            for name in study['ranking-files']:
-                fname = ranking_file(indicator, study_type, name, output_folder)
-                if not os.path.exists(fname):
-                    logging.warning('ranking file does not exist: '+fname)
-                    continue
-                ranking[name.replace('-','_')] = Ranking.load(fname)
+    cfg = load_indicator_config(indicator, input_folder)
 
+    # Select study
+    found = False
+    for stype in cfg['study-types']:
+        if stype['directory'] == study_type:
+            found = True
+            break
+    if not found:
+        raise ValueError('studytype not defined in config.json file: '+repr(study_type))
+
+    # metadata
+    meta_indicator = Indicator(indicator, cfg.get('name'))
+    meta_studytype = StudyType(study_type, stype.get('name'))
+
+    # load country ranking
+    ranking = MultiRanking()
+    for name in stype['ranking-files']:
+        fname = ranking_file(indicator, study_type, name, output_folder)
+        if not os.path.exists(fname):
+            logging.warning('ranking file does not exist: '+fname)
+            continue
+        ranking[name.replace('-','_')] = Ranking.load(fname)
+
+    # used by the figures
+    countrymasksnc = nc.Dataset('countrymasks.nc')
+    mapdata = MapData(indicator, study_type, input_folder, country_data_folder)
 
     def process_area(area):
         country = load_country_data(indicator, study_type, area, input_folder, country_data_folder=country_data_folder)
@@ -359,15 +390,17 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         tmpl = jinja2.Template(open(tmplfile).read())
         # tmpl = env.get_template(tmplfile)
         ranking.area = area # predefine area 
-        text = tmpl.render(country=country, world=world, ranking=ranking, 
-            lineplot=LinePlot(backend, makefig, backends=backends), 
-            rankingmap=RankingMap(ranking, backend, makefig, backends=backends), 
-            **country.variables)
 
         output_folder_local = os.path.join(output_folder, indicator, study_type, area)
         if not os.path.exists(output_folder_local):
             os.makedirs(output_folder_local)
     
+        text = tmpl.render(country=country, world=world, ranking=ranking, 
+            lineplot=LinePlot(output_folder_local, backend, makefig, backends=backends), 
+            rankingmap=RankingMap(ranking, countrymasksnc, output_folder_local, backend, makefig, backends=backends), 
+            countrymap=CountryMap(mapdata, countrymasksnc, output_folder_local, backend, makefig, backends=backends), 
+            indicator=meta_indicator, studytype=meta_studytype, **country.variables)
+
         md_file = os.path.join(output_folder_local, '{indicator}-{area}.md'.format(indicator=indicator, area=area))
         with open(md_file, 'w') as f:
             f.write(text)
@@ -383,6 +416,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
                 logging.warning(str(error))
                 print('!! failed',area)
 
+    countrymasksnc.close()
 
 
 def main():
