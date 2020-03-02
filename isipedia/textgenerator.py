@@ -9,6 +9,7 @@ import netCDF4 as nc
 
 from isipedia.jsonfile import JsonFile
 from isipedia.figure import LinePlot, CountryMap, RankingMap, MapData
+from isipedia.country import CountryStats, countrymasks_folder
 
 
 class CubeVariable:
@@ -36,63 +37,6 @@ class CubeVariable:
         if name.endswith(area):
             name = name[:-len(area)-1]
         return name.replace('-','_')
-
-
-class CountryStats:
-    """This is the class for the corresponding json file in country_data 
-    """
-    def __init__(self, name, type="country", sub_countries=[], stats=None):
-        self.name = name
-        self.type = type
-        self.sub_countries = sub_countries
-        self.stats = stats or []
-
-    @property
-    def pop_total(self):
-        "million people"
-        try:
-            i = [e['type'] for e in self.stats].index('POP_TOTL')
-        except ValueError as error:
-            # logging.warning(str(error))
-            return float('nan')
-        return self.stats[i]['value'] or float('nan')
-
-    # @property
-    # def pop_density(self):
-    #     'people/km2'
-    #     try:
-    #         i = [e['type'] for e in self.stats].index('POP_DNST')
-    #     except ValueError as error:
-    #         # logging.warning(str(error))
-    #         return float('nan')
-    #     return self.stats[i]['value'] or float('nan')
-
-    @property
-    def area(self):
-        "km2"
-        #return (self.pop_total*1e6 / self.pop_density)  or float('nan')
-        try:
-            i = [e['type'] for e in self.stats].index('total_area')
-        except ValueError as error:
-            # logging.warning(str(error))
-            return float('nan')
-        return self.stats[i]['value'] or float('nan')
-
-    # @property
-    # def pop_rural_pct(self):
-    #   i = [e['type'] for e in self.stats].index('RUR_POP_PRCT')
-    #   return self.stats[i]['value']
-    
-    # @property
-    # def pop_urban_pct(self):
-    #   i = [e['type'] for e in self.stats].index('URB_POP_PRCT')
-    #   return self.stats[i]['value']
-
-    @classmethod
-    def load(cls, fname):
-        js = json.load(open(fname))
-        return cls(js['name'], js['type'], js['sub-countries'], stats=js['stats'])
-
 
 
 def calculate_ranking(var, cube_path, country_names=None):
@@ -229,7 +173,6 @@ class Ranking:
 class TemplateData(CountryStats):
     """template data accessible for an author
     """
-
     def __init__(self, code, variables, **stats):
         super().__init__(**stats)
         self.code = code
@@ -252,6 +195,15 @@ class TemplateData(CountryStats):
         else:
           return self.name
 
+    @property
+    def pop_total(self):
+        return self.getvalue('POP_TOTL')
+
+    @property
+    def area(self):
+        return self.getvalue('SURFACE_AREA')
+
+
 
 def load_country_data(indicator, study_type, area, input_folder, country_data_folder=None):
     jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
@@ -263,26 +215,10 @@ def load_country_data(indicator, study_type, area, input_folder, country_data_fo
         # stats = CountryStats(area)
     except Exception as error:
         print('!!', str(error))
+        raise
         logging.warning("country stats not found for: "+area)
         # raise
         stats = CountryStats("undefined")
-
-    # for some reason all numbers are string, convert to float
-    for e in stats.stats:
-        try:
-            e['value'] = float(e['value'])
-        except KeyError:
-            pass  # no value key
-        except:
-            raise
-            pass
-        try:
-            e['rank'] = float(e['rank'])
-        except KeyError:
-            pass  # no rank key
-        except:
-            raise
-            pass
 
     return TemplateData(area, variables=variables, **vars(stats))
 
@@ -381,7 +317,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
         ranking[name.replace('-','_')] = Ranking.load(fname)
 
     # used by the figures
-    countrymasksnc = nc.Dataset('countrymasks.nc')
+    countrymasksnc = nc.Dataset(os.path.join(countrymasks_folder, 'countrymasks.nc'))
     mapdata = MapData(indicator, study_type, input_folder, country_data_folder)
 
     def process_area(area):
@@ -435,11 +371,13 @@ def main():
     parser.add_argument('--backends', default=None, help='backends to crunch')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
-    parser.add_argument('--country-data-dir', default=None, help='templates directory (default: <cube>/country_data)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
 
     o = parser.parse_args()
-    print(o.country_data_dir)
+
+
+    country_data_folder = os.path.join(countrymasks_folder, 'country_data')
+    print('country_data:', country_data_folder)
 
     if not o.out_cube_path:
         o.out_cube_path = o.cube_path
@@ -460,7 +398,7 @@ def main():
             print(studytype)
             try:
                 process_indicator(indicator, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
-                    study_type=studytype, templatesdir=o.templates_dir, country_data_folder=o.country_data_dir,
+                    study_type=studytype, templatesdir=o.templates_dir, country_data_folder=country_data_folder,
                     fail_on_error=not o.skip_error, makefig=o.makefig, backend=o.backend, backends=o.backends)
             except Exception as error:
                 raise
