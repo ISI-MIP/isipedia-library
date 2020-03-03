@@ -8,8 +8,8 @@ import logging
 import netCDF4 as nc
 
 from isipedia.jsonfile import JsonFile
-from isipedia.figure import LinePlot, CountryMap, RankingMap, MapData
-from isipedia.country import CountryStats, countrymasks_folder
+from isipedia.figure import figures_register, MapData
+from isipedia.country import Country, countrymasks_folder, country_data_folder
 
 
 class CubeVariable:
@@ -170,57 +170,75 @@ class Ranking:
         return cls(ranking_data)
 
 
-class TemplateData(CountryStats):
-    """template data accessible for an author
-    """
-    def __init__(self, code, variables, **stats):
-        super().__init__(**stats)
+
+class MultiRanking(dict):
+    def __init__(self, ranking=None, area=None):
+        self.area = area 
+        super().__init__(ranking or {})
+
+    def __call__(self, variable, x=None, area=None, method='position', **kwargs):
+        """select the appropriate ranking class and pass on relevant arguments.
+        area defaults to context-specific area
+        """
+        r = self[variable]  # Ranking instance
+        func = getattr(r, method) #  Ranking instance method
+        kwargs['x'] = x
+        if method in ('value', 'number', 'position'):
+            kwargs['area'] = area or self.area
+        return func(**kwargs)
+
+
+class StudyType:
+    def __init__(self, code, name='', description=''):
         self.code = code
-        self.variables = variables
+        self.name = name or code.replace('-',' ').capitalize()
+        self.description = description or ''
+
+
+class Indicator:
+    def __init__(self, code, name):
+        self.code = code
+        self.name = name
+
+
+class TemplateContext:
+    """template data accessible within jinja2 and provided to various functions such as figures
+    """
+    def __init__(self, indicator, studytype, area, cube_folder='cube'):
+        self.indicator = indicator
+        self.studytype = studytype
+        self.area = area
+        self.cube_folder = cube_folder
+        self.folder = os.path.join(cube_folder, indicator, studytype, area)
+
+    @property
+    def cube_index(self):
+        return self.indicator, self.studytype, self.area
+
+    def load_json_files(self):
+        indicator, studytype, area = self.cube_index
+        jsfiles = glob.glob(CubeVariable(self.indicator, studytype, '*').jsonfile(area, self.cube_folder))
+        self.variables = {CubeVariable._varname(fname, area):JsonFile.load(fname) for fname in jsfiles}
+
+    def load_country_stats(self):
+        try:
+            self.country = Country.load(os.path.join(country_data_folder, self.area, self.area+'_general.json'))
+            # stats = CountryStats(self.area)
+        except Exception as error:
+            print('!!', str(error))
+            logging.warning("country stats not found for: "+self.area)
+            # raise
+            self.country = Country("undefined")
 
     def __getattr__(self, name):
         return self.variables[name]
 
-    @property
-    def nameS(self):
-        if self.name[len(self.name)-1] == 's':
-          return self.name+'’'
-        else:
-          return self.name+'’s'   
 
-    @property
-    def thename(self):
-        if self.name == 'World' or self.name in ():
-          return 'the '+self.name.lower()
-        else:
-          return self.name
-
-    @property
-    def pop_total(self):
-        return self.getvalue('POP_TOTL')
-
-    @property
-    def area(self):
-        return self.getvalue('SURFACE_AREA')
-
-
-
-def load_country_data(indicator, study_type, area, input_folder, country_data_folder=None):
-    jsfiles = glob.glob(CubeVariable(indicator, study_type, '*').jsonfile(area, input_folder))
-    variables = {CubeVariable._varname(fname, area):JsonFile.load(fname) for fname in jsfiles}
-    if country_data_folder is None:
-        country_data_folder = 'cube/country_data'
-    try:
-        stats = CountryStats.load(os.path.join(country_data_folder, area, area+'_general.json'))
-        # stats = CountryStats(area)
-    except Exception as error:
-        print('!!', str(error))
-        raise
-        logging.warning("country stats not found for: "+area)
-        # raise
-        stats = CountryStats("undefined")
-
-    return TemplateData(area, variables=variables, **vars(stats))
+def load_template_context(indicator, study_type, area, cube_folder='cube'):
+    context = TemplateContext(indicator, study_type, area, cube_folder)
+    context.load_json_files()
+    context.load_country_stats()
+    return context
 
 
 def select_template(indicator, area=None, templatesdir='templates'):
@@ -246,53 +264,19 @@ def select_template(indicator, area=None, templatesdir='templates'):
     # def map(self, x, scenario=None, **kwargs):
     #     return RankingMap(self, x, scenario, **kwargs)
 
-
-class MultiRanking(dict):
-    def __init__(self, ranking=None, area=None):
-        self.area = area 
-        super().__init__(ranking or {})
-
-    def __call__(self, variable, x=None, area=None, method='position', **kwargs):
-        """select the appropriate ranking class and pass on relevant arguments.
-        area defaults to context-specific area
-        """
-        r = self[variable]  # Ranking instance
-        func = getattr(r, method) #  Ranking instance method
-        kwargs['x'] = x
-        if method in ('value', 'number', 'position'):
-            kwargs['area'] = area or self.area
-        return func(**kwargs)
-
-
     # def map(self, variable, x=None, scenario=None, title='', **kwargs):
     #     return self[variable].map(x, scenario, title=title or variable, **kwargs)
 
 
-
-class StudyType:
-    def __init__(self, code, name='', description=''):
-        self.code = code
-        self.name = name or code.replace('-',' ').capitalize()
-        self.description = description or ''
-
-
-class Indicator:
-    def __init__(self, code, name):
-        self.code = code
-        self.name = name
-
-
-def process_indicator(indicator, input_folder, output_folder, country_names=None, study_type='future-projections',
-    templatesdir='templates', country_data_folder=None, fail_on_error=False, backend='mpl', makefig=True, backends=None):
+def process_indicator(indicator, cube_folder, country_names=None, study_type='future-projections',
+    templatesdir='templates', fail_on_error=False, makefig=True):
   
-    world = load_country_data(indicator, study_type, 'world', input_folder, country_data_folder=country_data_folder)
-
     # Going though all the countries in the list.
     if country_names is None:
-        country_names = sorted(os.listdir (os.path.join(input_folder, indicator, study_type)))
+        country_names = sorted(os.listdir (os.path.join(cube_folder, indicator, study_type)))
         country_names = [c for c in country_names if os.path.exists(os.path.join(country_data_folder, c))]
 
-    cfg = load_indicator_config(indicator, input_folder)
+    cfg = load_indicator_config(indicator, cube_folder)
 
     # Select study
     found = False
@@ -310,7 +294,7 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
     # load country ranking
     ranking = MultiRanking()
     for name in stype['ranking-files']:
-        fname = ranking_file(indicator, study_type, name, output_folder)
+        fname = ranking_file(indicator, study_type, name, cube_folder)
         if not os.path.exists(fname):
             logging.warning('ranking file does not exist: '+fname)
             continue
@@ -318,26 +302,35 @@ def process_indicator(indicator, input_folder, output_folder, country_names=None
 
     # used by the figures
     countrymasksnc = nc.Dataset(os.path.join(countrymasks_folder, 'countrymasks.nc'))
-    mapdata = MapData(indicator, study_type, input_folder, country_data_folder)
+    mapdata = MapData(indicator, study_type, cube_folder)
+
 
     def process_area(area):
-        country = load_country_data(indicator, study_type, area, input_folder, country_data_folder=country_data_folder)
+        context = load_template_context(indicator, study_type, area, cube_folder)
+
+        # add global context
+        context.countrymasksnc = countrymasksnc
+        context.mapdata = mapdata
+        context.ranking = ranking
+        # context.folder = os.path.join(cube_folder, indicator, study_type, area)
+
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
         # tmpl = env.get_template(tmplfile)
         ranking.area = area # predefine area 
 
-        output_folder_local = os.path.join(output_folder, indicator, study_type, area)
-        if not os.path.exists(output_folder_local):
-            os.makedirs(output_folder_local)
-    
-        text = tmpl.render(country=country, world=world, ranking=ranking, 
-            lineplot=LinePlot(output_folder_local, backend, makefig, backends=backends), 
-            rankingmap=RankingMap(ranking, countrymasksnc, output_folder_local, backend, makefig, backends=backends), 
-            countrymap=CountryMap(mapdata, countrymasksnc, output_folder_local, backend, makefig, backends=backends), 
-            indicator=meta_indicator, studytype=meta_studytype, **country.variables)
+        if not os.path.exists(context.folder):
+            os.makedirs(context.folder)
 
-        md_file = os.path.join(output_folder_local, '{indicator}-{area}.md'.format(indicator=indicator, area=area))
+        figure_functions = {name:cls(context, makefig) for name, cls in figures_register.items()}
+    
+        kwargs = context.variables.copy()
+        kwargs.update(figure_functions)
+
+        text = tmpl.render(country=context.country, ranking=ranking, 
+            indicator=meta_indicator, studytype=meta_studytype, **kwargs)
+
+        md_file = os.path.join(context.folder, '{indicator}-{area}.md'.format(indicator=indicator, area=area))
         with open(md_file, 'w') as f:
             f.write(text)
 
@@ -364,11 +357,8 @@ def main():
     parser.add_argument('--areas', nargs='*', help='scan all areas by default')
     parser.add_argument('--indicators', nargs='+', required=True, help='')
     parser.add_argument('--cube-path', default='cube', help='%(default)s')
-    parser.add_argument('--out-cube-path', help='if output shall differs from output')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
     parser.add_argument('--makefig', action='store_true', help='make figures')
-    parser.add_argument('--backend', default='mpl', help='default backend for figures')
-    parser.add_argument('--backends', default=None, help='backends to crunch')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
@@ -378,9 +368,6 @@ def main():
 
     country_data_folder = os.path.join(countrymasks_folder, 'country_data')
     print('country_data:', country_data_folder)
-
-    if not o.out_cube_path:
-        o.out_cube_path = o.cube_path
 
     for indicator in o.indicators:
 
@@ -397,9 +384,8 @@ def main():
         for studytype in study_types:
             print(studytype)
             try:
-                process_indicator(indicator, o.cube_path+'/', o.out_cube_path+'/', country_names=o.areas, 
-                    study_type=studytype, templatesdir=o.templates_dir, country_data_folder=country_data_folder,
-                    fail_on_error=not o.skip_error, makefig=o.makefig, backend=o.backend, backends=o.backends)
+                process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
+                    study_type=studytype, templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig)
             except Exception as error:
                 raise
                 print(error)

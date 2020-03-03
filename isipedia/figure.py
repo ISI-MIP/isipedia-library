@@ -1,9 +1,22 @@
 import os
 import json
 import hashlib
-
-
 import numpy as np
+
+from isipedia.country import country_data_folder
+
+# plumbing to register figures
+figures_register = {}
+
+def isipediafigure(name):
+    """decorator to register the figure names and make them available in jinja2
+    """
+    def decorator(cls):
+        figures_register[name] = cls
+        return cls
+
+    return decorator
+
 
 class NpEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -18,61 +31,102 @@ def _hashsum(kwargs, l=6):
     return hashlib.sha1(string.encode()).hexdigest()[:l] 
 
 
-class SuperFig:
-    backends = ['mpl']
-    make = None
+def _shortname(fname, area):
+    ' determine variable name from json file name '
+    name, ext = os.path.splitext(os.path.basename(fname))
+    if name.endswith(area):
+        name = name[:-len(area)-1]
+    return name.replace('-','_')
 
-    def __init__(self, folder, backend, makefig=True, backends=None):
-        self.folder = folder
-        self.backend = backend
+
+def _get_json_file(context, arg):
+    from isipedia.jsonfile import JsonFile
+    if isinstance(arg, JsonFile):
+        return arg
+
+    if arg in context.variables:
+        return context.variables[arg]
+
+    fname = _shortname(arg, context.area)
+    fnames = [_shortname(v.filename, v.area) for v in context.variables]
+    if fname in fnames:
+        return context.variables[fnames.index(fname)]
+
+    fname = os.path.join(context.folder, arg)
+    if os.path.exists(fname):
+        if os.path.splitext(fname)[1] == '.json':
+            return json.load()
+        else:
+            raise NotImplementedError('cannot load {}'.format(fname))
+
+    raise ValueError('no matching variable found: '+repr(arg))
+
+
+class SuperFig:
+    backend = None
+    prefix = ''
+    ext = '.png' # static extension
+
+    def __init__(self, context, makefig=True):
+        self.context = context
         self.makefig = makefig
-        if backends:
-            self.backends = backends
 
     def figcode(self, *args, **kwargs):
         "code based on file name and figure arguments"
         kwargs['args'] = args
-        return _hashsum(kwargs)
+        return self.prefix + _hashsum(kwargs)
+
+    def figpath(self, figid, relative=False):
+        return os.path.join('' if relative else self.context.folder, 'figures', figid+'-'+self.backend +self.ext)
+
+    def insert_cmd(self, figid, caption=''):
+        return '![{}]({}){{{}}}'.format(caption, self.figpath(figid, relative=True), '#fig:'+figid)
 
     def __call__(self, *args, **kwargs):
-        if self.makefig:
-            # self.make_figs(data, kwargs, [self.backend])
-            self.make_figs(args, kwargs)
-        return self.insert_cmd(args, kwargs)
-
-
-    def figpath(self, args, kwargs, backend=None, relative=False):
-        ext = {'mpl': 'png', 'mpld3': 'json'}[backend or self.backend]
-        return os.path.join('' if relative else self.folder, 'figures', self.figcode(*args, **kwargs) + '.' + ext)
-
-    def insert_cmd(self, args, kwargs, backend=None):
-        backend = backend or self.backend
-        if backend == 'mpl':
-            cmd = '![{}]({})'.format(kwargs.get('caption',''), self.figpath(args, kwargs, backend, relative=True))
-        elif backend == 'mpld3':
-            cmd = '<div id={}>{}</div>'.format(self.figcode(*args, **kwargs), kwargs.get('caption'))
-        else:
-            cmd = '!! Error when inserting figure: {} for backend {}'.format(self.figcode(*args, **kwargs), backend)
-        return cmd
-
-
-    def make_figs(self, args, kwargs, backends=None):
-        "custom make figs that reuse same figure"
-        backends = backends or self.backends
-        if not backends : return
-        import matplotlib.pyplot as plt
+        # extract markdown parameters
         caption = kwargs.pop('caption','')
-        fig, axes = self.make(*args, **kwargs)
-        for backend in backends:        
-            if backend == 'mpl':
-                fpath = _maybe_createdir(self.figpath(args, kwargs, 'mpl'))
-                fig.savefig(fpath, dpi=100)
-            elif backend == 'mpld3':
-                import mpld3
-                js = mpld3.fig_to_dict(fig)
-                fpath = _maybe_createdir(self.figpath(args, kwargs, 'mpld3'))
-                json.dump(js, open(fpath, 'w'), cls=NpEncoder)
-        plt.close(fig)
+        figid = kwargs.pop('id', '')
+        assert type(figid) is str, 'id parameter must be a string'
+        assert type(caption) is str, 'caption parameter must be a string'
+        if not figid:
+            figid = self.figcode(*args, **kwargs)
+
+        if self.makefig:
+            fig = self.make(*args, **kwargs)
+            figpath = self.figpath(figid)
+            figdir = os.path.join(self.context.folder, 'figures')
+            if not os.path.exists(figdir):
+                os.makedirs(figdir)
+            path_noext, ext = os.path.splitext(figpath)
+            self.save_and_close(fig, path_noext) 
+
+        return self.insert_cmd(figid, caption)
+
+    def make(self):
+        raise NotImplementedError()
+
+    def _get_json_file(self, variable):
+        return _get_json_file(self.context, variable)
+
+    def save_and_close(self, fig, path_noext):
+        if self.backend == 'mpl':
+            import matplotlib.pyplot as plt
+            fig.savefig(path_noext+self.ext, dpi=100)
+            plt.close(fig)
+
+        elif self.backend == 'mpld3':
+            import mpld3
+            import matplotlib.pyplot as plt
+            fig.savefig(path_noext+self.ext, dpi=100)
+            js = mpld3.fig_to_dict(fig)
+            fpath = path_noext+'.json'
+            json.dump(js, open(fpath, 'w'), cls=NpEncoder)
+            plt.close(fig)
+
+        elif self.backend == 'vl':
+            fig.save(path_noext+self.ext) # static
+            fig.save(path_noext+'.json') # json
+
 
 
 def _maybe_createdir(path):
@@ -170,7 +224,207 @@ def _lineplot(data, x=None, scenario=None, climate=None, impact=None, shading=Fa
 
 
 
-def _rankingmap(countrymasksnc, ranking, x, scenario=None, method='number', title='', label=''):
+@isipediafigure(name='lineplot_mpl')
+class LinePlotMpl(SuperFig):
+
+    backend = 'mpl'
+
+    def make(self, vname, *args, **kwargs):
+        data = self._get_json_file(vname)
+        fig, ax = _lineplot(data, *args, **kwargs)
+        return fig
+
+    def figcode(self, vname, *args, **kwargs):
+        data = self._get_json_file(vname)
+        kwargs['filename'] = data.filename
+        kwargs['args'] = args
+        return _hashsum(kwargs)
+
+
+def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
+    import pandas as pd
+    import altair as alt
+
+    df = pd.concat([pd.DataFrame(l) for l in data.filter_lines()])
+
+    # Divide by 100 so we can percent-format in the plot
+    df.y = df.y / 100
+
+    df["x_range"] = df.x
+    df.x = df.x.apply(lambda x: int(x.split("-")[1]) - 10)
+    df = df[df.x < 2100]
+
+    # Fill in gap by duplicating historical values to future scenarios
+    extra = df[(df.scenario == "historical") & (df.x == 1990)].copy()
+    extra.at[:, "scenario"] = "rcp60"
+    df = df.append(extra)
+    extra = df[(df.scenario == "historical") & (df.x == 1990)].copy()
+    extra.at[:, "scenario"] = "rcp26"
+    df = df.append(extra)
+
+    df["model"] = df.climate + " / " + df.impact
+
+    df.head(10)
+
+    # ------------------
+
+    selection_climate = alt.selection_multi(fields=['scenario'], bind='legend')
+
+    nearest = alt.selection(type='single', nearest=True, on='mouseover',
+                            fields=["x", 'y'], empty='none')
+
+    base = alt.Chart(df[(df.climate != "median")])
+
+    color = alt.Color('scenario', scale=alt.Scale(scheme="tableau10"))
+
+    rule_data = pd.DataFrame({'line': [2005]})
+    rule_text_data = pd.DataFrame([
+        {"year": 1870, "text": "Historical Period"},
+        {"year": 2010, "text": "Future Projections"},
+    ])
+        
+
+    rule = alt.Chart(rule_data).mark_rule().encode(
+        x='line:Q'
+    )
+
+    rule_text = alt.Chart(rule_text_data).mark_text(align="left", dy=-130).encode(
+        x="year",
+        text="text"
+    )
+
+    area = base.mark_area(opacity=0.3).encode(
+        x=alt.X("x", axis=alt.Axis(format="i")),
+        color=color,
+        y=alt.Y(field="y", type="quantitative", axis=alt.Axis(format='%'), aggregate="min"),
+        y2=alt.Y2(field="y", aggregate="max"),
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)),
+    ).add_selection(selection_climate)
+
+    lines = base.mark_line().encode(
+        x=alt.X("x"),
+        y=alt.Y("y", axis=alt.Axis(format='%')),
+        detail=["climate", "impact", "scenario"],
+        color=color,
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
+        size=alt.condition("datum.impact == 'median'", alt.value(5), alt.value(1))
+    )
+
+    points = base.mark_point().encode(
+        x=alt.X("x", axis=alt.Axis(title=data.plot_unit_x)),
+        y=alt.Y("y", axis=alt.Axis(title=data.plot_unit_y, format='%')),
+        detail=["climate", "impact", "scenario"],
+        color=color,
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
+        size=alt.value(12),
+    )
+
+    text_model = points.mark_text(align='left', dx=-5, dy=-6).encode(
+        text=alt.condition(nearest, "model", alt.value(' ')),
+        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
+        color=alt.value("black")
+    ).add_selection(nearest)
+
+    text_pct = points.mark_text(align='left', dx=-5, dy=6).encode(
+        text=alt.condition(nearest, "y", alt.value(' '), format=".2p"),
+        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
+        color=alt.value("black")
+    )
+
+
+    chart = (area + rule + rule_text +  lines + points + text_model + text_pct).properties(
+        title=data.plot_title,
+        width=800,
+        autosize=alt.AutoSizeParams(contains="padding", type="fit-x"),
+    ).configure(background='#F1F4F4').interactive()
+
+    # chart.save("chart.json")
+    return chart
+
+
+def _lineplot_altair_temp(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
+    import pandas as pd
+    import altair as alt
+
+    df = pd.concat([pd.DataFrame(l) for l in data.filter_lines()])
+
+    df["model"] = df.climate + " / " + df.impact
+
+    # Divide by 100 so we can percent-format in the plot
+    df.y = df.y / 100
+
+    selection_climate = alt.selection_multi(fields=['climate'], bind='legend')
+
+    nearest = alt.selection(type='single', nearest=True, on='mouseover',
+                            fields=["x", 'y'], empty='none')
+
+    base = alt.Chart(df[(df.climate != "median")])
+
+    color = alt.Color('climate', scale=alt.Scale(scheme="dark2"))
+
+    area = base.mark_area(opacity=0.3).encode(
+        x=alt.X("x", scale=alt.Scale(domain=(-0.1, 4.1))),
+        color=color,
+        y=alt.Y(field="y", type="quantitative", axis=alt.Axis(format='%'), aggregate="min"),
+        y2=alt.Y2(field="y", aggregate="max"),
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)),
+    ).add_selection(selection_climate)
+
+    lines = base.mark_line().encode(
+        x=alt.X("x"),
+        y=alt.Y("y", axis=alt.Axis(format='%')),
+        detail=["climate", "impact"],
+        color=color,
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
+        size=alt.condition("datum.impact == 'median'", alt.value(5), alt.value(1)),
+    )
+
+    points = base.mark_point().encode(
+        x=alt.X("x", axis=alt.Axis(title=data.plot_unit_x, values=data.x)),
+        y=alt.Y("y", axis=alt.Axis(title=data.plot_unit_y, format='%')),
+        detail=["climate", "impact"],
+        color=color,
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
+        size=alt.value(12)
+    )
+
+    text_model = points.mark_text(align='left', dx=-5, dy=-6).encode(
+        text=alt.condition(nearest, "model", alt.value(' ')),
+        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
+        color=alt.value("black")
+    ).add_selection(nearest)
+
+    text_pct = points.mark_text(align='left', dx=-5, dy=6).encode(
+        text=alt.condition(nearest, "y", alt.value(' '), format=".2p"),
+        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
+        color=alt.value("black")
+    )
+
+    chart = (area + lines + points + text_model + text_pct ).properties(
+        title=data.plot_title,
+        width=800,
+        autosize=alt.AutoSizeParams(contains="padding", type="fit-x"),
+    ).configure(background='#F1F4F4').interactive()
+
+    return chart
+
+
+
+@isipediafigure(name='lineplot')
+class LinePlot(LinePlotMpl):
+
+    backend = 'vl'
+
+    def make(self, vname, *args, **kwargs):
+        data = self._get_json_file(vname)
+        if data.plot_type == 'indicator_vs_temperature':
+            return _lineplot_altair_temp(data, *args, **kwargs)
+        else:
+            return _lineplot_altair_time(data, *args, **kwargs)
+
+
+
+def _rankingmap_mpl(countrymasksnc, ranking, x, scenario=None, method='number', title='', label=''):
     """
     countrymasksnc : nc.Dataset instance of countrymasks.nc
     ranking: Ranking instance
@@ -204,7 +458,6 @@ def _rankingmap(countrymasksnc, ranking, x, scenario=None, method='number', titl
         data[m] = value
         mask[m] = False 
 
-
     fig, ax = plt.subplots(1,1)
     h = ax.imshow(np.ma.array(data, mask=mask), extent=[-180, 180, -90, 90], 
         cmap=plt.cm.viridis_r if method == "number" else plt.cm.viridis, 
@@ -221,7 +474,56 @@ def _rankingmap(countrymasksnc, ranking, x, scenario=None, method='number', titl
     ax.set_title(title or default_title)
     plt.colorbar(h, ax=ax, orientation='horizontal', label=label or default_label)    
 
-    return fig, ax
+    return fig
+
+
+@isipediafigure(name='rankingmap')
+class RankingMap(SuperFig):
+    backend = 'mpl'
+
+    def make(self, variable, *args, **kwargs):
+        return _rankingmap_mpl(self.context.countrymasksnc, self.context.ranking[variable.replace('-','_')], *args, **kwargs)
+
+    def figcode(self, variable, x, **kwargs):
+        kwargs['x'] = x
+        kwargs['variable'] = variable   # string
+        return _hashsum(kwargs)
+
+
+## TODO: get geojson into altair
+
+# def _rankingmap_altair(countrymasksnc, ranking, x, scenario=None, method='number', title='', label=''):
+#     import pandas as pd
+#     import altair as alt
+#     # Adapted from https://altair-viz.github.io/gallery/index.html
+
+#     data, mask = _get_ranking_data(countrymasksnc, ranking, x, scenario, method)
+
+#     # Natural Earth Dataset uses ISO country numbers as IDs
+#     ranking_data = pd.DataFrame([
+#         (156, 1, "China"),
+#         (840, 2, "USA"),
+#         (76, 3, "Brazil")
+#     ], columns=["id", "Rank", "Country"])
+
+#     # Source of land data
+#     source = alt.topo_feature("https://vega.github.io/vega-datasets/data/world-110m.json", 'countries')
+
+#     # Layering and configuring the components
+#     chart = alt.Chart(source).mark_geoshape(stroke='black').encode(
+#         color="Rank:O",
+#         tooltip=["Rank:O", "Country:N"]
+#     ).transform_lookup(
+#         lookup='id',
+#         from_=alt.LookupData(ranking_data, 'id', ['Rank'])
+#     ).transform_lookup(
+#         lookup='id',
+#         from_=alt.LookupData(ranking_data, 'id', ['Country'])
+#     ).project(
+#         'naturalEarth1'
+#     ).properties(width=600, height=400).configure_view(stroke=None)        
+
+#     return chart
 
 
 class MapBounds:
@@ -250,11 +552,10 @@ class MapBounds:
 class MapData:
     """lazy loading of map data
     """
-    def __init__(self, indicator, studytype, cube_path, country_data_path):
+    def __init__(self, indicator, studytype, cube_path):
         self.indicator = indicator
         self.studytype = studytype
         self.cube_path = cube_path
-        self.country_data_path = country_data_path
         self._data = {}
         self._areas = {}
 
@@ -278,7 +579,7 @@ class MapData:
 
     def bounds(self, area):
         if area not in self._areas:
-            boundspath = os.path.join(self.country_data_path, area, 'bounds.json')
+            boundspath = os.path.join(country_data_folder, area, 'bounds.json')
             self._areas[area] = MapBounds.load(boundspath)
         return self._areas[area]
 
@@ -287,6 +588,8 @@ class MapData:
         if name not in self._data:
             self._data[name] = self.loadcsv(name, x, scenario, climate, impact)
         return self._data[name]
+
+
 
 
 def _countrymap(mapdata, countrymasksnc, jsfile, x=None, scenario=None, climate=None, impact=None, title='', label=''):
@@ -334,48 +637,20 @@ def _countrymap(mapdata, countrymasksnc, jsfile, x=None, scenario=None, climate=
     ax.set_title(title or default_title)
     plt.colorbar(h, ax=ax, orientation='horizontal', label=label or default_label)
 
-    return fig, ax
+    return fig
 
 
-class LinePlot(SuperFig):
 
-    def make(self, *args, **kwargs):
-        return _lineplot(*args, **kwargs)
-
-    def figcode(self, jsfile, **kwargs):
-        kwargs['filename'] = jsfile.filename
-        return _hashsum(kwargs)
-
-
+@isipediafigure(name='countrymap')
 class CountryMap(SuperFig):
+    backend = 'mpl'
 
-    def __init__(self, mapdata, countrymasksnc, folder, backend, makefig=True, backends=None):
-        self.mapdata = mapdata
-        self.countrymasksnc = countrymasksnc
-        super().__init__(folder, backend, makefig, backends)
-
-    def make(self, *args, **kwargs):
-        return _countrymap(self.mapdata, self.countrymasksnc, *args, **kwargs)
+    def make(self, vname, *args, **kwargs):
+        jsfile = self._get_json_file(vname)
+        return _countrymap(self.context.mapdata, self.context.countrymasksnc, jsfile, *args, **kwargs)
 
     def figcode(self, jsfile, x, **kwargs):
+        jsfile = self._get_json_file(jsfile)
         kwargs['x'] = x
         kwargs['filename'] = jsfile.filename
-        return _hashsum(kwargs)
-
-
-
-class RankingMap(SuperFig):
-
-    def __init__(self, ranking, countrymasksnc, folder, backend, makefig=True, backends=None):
-        super().__init__(folder, backend, makefig, backends)
-        self.ranking = ranking
-        self.countrymasksnc = countrymasksnc
-
-
-    def make(self, variable, *args, **kwargs):
-        return _rankingmap(self.countrymasksnc, self.ranking[variable], *args, **kwargs)
-
-    def figcode(self, variable, x, **kwargs):
-        kwargs['x'] = x
-        kwargs['variable'] = variable   # string
         return _hashsum(kwargs)
