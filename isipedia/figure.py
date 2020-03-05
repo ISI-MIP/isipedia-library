@@ -111,6 +111,7 @@ class SuperFig:
     def save_and_close(self, fig, path_noext):
         if self.backend == 'mpl':
             import matplotlib.pyplot as plt
+            print('saving mpl...')
             fig.savefig(path_noext+self.ext, dpi=100)
             plt.close(fig)
 
@@ -124,9 +125,11 @@ class SuperFig:
             plt.close(fig)
 
         elif self.backend == 'vl':
+            print('{}: saving json...'.format(type(self)))
+            fig.save(path_noext+'.json') # json
+            print('{}: saving png...'.format(type(self)))
             # fig.save(path_noext+self.ext) # static
             fig.save(path_noext+'.png', scale_factor=2) # static
-            fig.save(path_noext+'.json') # json
 
 
 
@@ -484,6 +487,9 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
     import pandas as pd
     import altair as alt
 
+    if method not in ['number', 'value']:
+        raise ValueError('method must be "number" or "value"')
+
     source = alt.Data(values=countries)
 
     ranking_method = getattr(ranking, method)
@@ -491,20 +497,21 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
     for c in countries:
         area = c['properties']['ISIPEDIA']
         name = c['properties']['NAME']
-        ranking_data.append((area, ranking_method(area, x, scenario), name))
+        value = ranking.value(area, x, scenario)
+        if value is not None:
+            value = round(value, 2)
+        rank = ranking.number(area, x, scenario)
+        ranking_data.append((area, name, value, rank))
 
-    ranking_data = pd.DataFrame(ranking_data, columns=["id", "Rank", "Country"])
+    ranking_data = pd.DataFrame(ranking_data, columns=["Code", "Country", "Value", "Rank"])
 
     chart = alt.Chart(source).mark_geoshape().encode(
         # color="Rank:Q",
-        color=alt.Color("Rank:Q", sort='ascending' if method == 'number' else 'descending'),
-        tooltip=["Rank:Q", "Country:N"]
+        color=alt.Color("Rank:Q", sort='ascending') if method == 'number'  else alt.Color("Value:Q", sort='descending'),
+        tooltip=["Value:Q", "Rank:Q", "Country:N", "Code:N"]
     ).transform_lookup(
         lookup='properties.ISIPEDIA',
-        from_=alt.LookupData(ranking_data, 'id', ['Rank'])
-    ).transform_lookup(
-        lookup='properties.ISIPEDIA',
-        from_=alt.LookupData(ranking_data, 'id', ['Country'])
+        from_=alt.LookupData(ranking_data, 'Code', ranking_data.columns.tolist())
     ).project(
         'naturalEarth1'
     ).properties(width=600, height=400).configure_view(stroke=None)
@@ -518,7 +525,7 @@ class RankingMap(SuperFig):
 
     def make(self, variable, *args, **kwargs):
         # return _rankingmap_mpl(self.context.countrymasksnc, self.context.ranking[variable.replace('-','_')], *args, **kwargs)
-        return _rankingmap_altair(self.context.countries, self.context.ranking[variable.replace('-','_')], *args, **kwargs)
+        return _rankingmap_altair(self.context.countries_simple, self.context.ranking[variable.replace('-','_')], *args, **kwargs)
 
     def figcode(self, variable, x, **kwargs):
         kwargs['x'] = x

@@ -148,19 +148,26 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
         ranking[name.replace('-','_')] = Ranking.load(fname)
 
     # used by the figures
-    countrymasksnc = nc.Dataset(os.path.join(countrymasks_folder, 'countrymasks.nc'))
-    countries = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
-    mapdata = MapData(indicator, study_type, cube_folder)
+    if makefig:
+        countrymasksnc = nc.Dataset(os.path.join(countrymasks_folder, 'countrymasks.nc'))
+        countries = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
+        countries_simple = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
+        import shapely.geometry as shg
+        for c in countries_simple:
+            c['geometry'] = shg.mapping(shg.shape(c['geometry']).simplify(0.1))  # faster rendering?
+        mapdata = MapData(indicator, study_type, cube_folder)
 
 
     def process_area(area):
         context = load_template_context(indicator, study_type, area, cube_folder)
 
         # add global context
-        context.countrymasksnc = countrymasksnc
-        context.countries = countries
-        context.mapdata = mapdata
-        context.ranking = ranking
+        if makefig:
+            context.countrymasksnc = countrymasksnc
+            context.countries = countries
+            context.countries_simple = countries_simple
+            context.mapdata = mapdata
+            context.ranking = ranking
         # context.folder = os.path.join(cube_folder, indicator, study_type, area)
 
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
