@@ -496,7 +496,8 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
     ranking_data = pd.DataFrame(ranking_data, columns=["id", "Rank", "Country"])
 
     chart = alt.Chart(source).mark_geoshape().encode(
-        color="Rank:Q",
+        # color="Rank:Q",
+        color=alt.Color("Rank:Q", sort='ascending' if method == 'number' else 'descending'),
         tooltip=["Rank:Q", "Country:N"]
     ).transform_lookup(
         lookup='properties.ISIPEDIA',
