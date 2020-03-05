@@ -124,7 +124,8 @@ class SuperFig:
             plt.close(fig)
 
         elif self.backend == 'vl':
-            fig.save(path_noext+self.ext) # static
+            # fig.save(path_noext+self.ext) # static
+            fig.save(path_noext+'.png', scale_factor=2) # static
             fig.save(path_noext+'.json') # json
 
 
