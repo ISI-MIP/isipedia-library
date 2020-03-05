@@ -153,8 +153,13 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
         countries = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
         countries_simple = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
         import shapely.geometry as shg
+        import shapely.ops
         for c in countries_simple:
-            c['geometry'] = shg.mapping(shg.shape(c['geometry']).simplify(0.1))  # faster rendering?
+            # simplify for faster rendering
+            simple = shg.shape(c['geometry']).simplify(0.1) 
+            simple2 = shapely.ops.transform(lambda x, y: (round(x, 2), round(y, 2)), simple)
+            c['geometry'] = shg.mapping(simple2)
+
         mapdata = MapData(indicator, study_type, cube_folder)
 
 

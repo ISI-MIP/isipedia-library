@@ -492,6 +492,13 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
 
     source = alt.Data(values=countries)
 
+    if ranking.plot_type == 'indicator_vs_temperature':
+        details = 'warming level: {} {}'.format(x, ranking.plot_unit_x)
+    else:
+        details = 'period: {}, scenario: {}'.format(x, {'rcp26':'RCP 2.6', 'rcp45':'RCP 4.5', 'rcp60':'RCP 6', 'rcp85':'RCP 8.5'}.get(scenario, scenario))
+    default_title = getattr(ranking, 'plot_label_y','') + '\n' + details
+    # default_label = 'ranking number' if method == 'number' else ('ranking value ({})'.format(getattr(ranking, 'plot_unit_y')))    
+
     ranking_method = getattr(ranking, method)
     ranking_data = []
     for c in countries:
@@ -501,14 +508,15 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
         if value is not None:
             value = round(value, 2)
         rank = ranking.number(area, x, scenario)
-        ranking_data.append((area, name, value, rank))
+        ranking_data.append((area, name, value, rank, ranking.plot_label_y, ranking.plot_unit_y))
 
-    ranking_data = pd.DataFrame(ranking_data, columns=["Code", "Country", "Value", "Rank"])
+    ranking_data = pd.DataFrame(ranking_data, columns=["Code", "Country", "Value", "Rank", 'label', 'unit'])
 
     chart = alt.Chart(source).mark_geoshape().encode(
         # color="Rank:Q",
         color=alt.Color("Rank:Q", sort='ascending') if method == 'number'  else alt.Color("Value:Q", sort='descending'),
-        tooltip=["Value:Q", "Rank:Q", "Country:N", "Code:N"]
+        # tooltip=["Country:N", "Code:N", "Value:Q", "Rank:Q"]
+        tooltip=["label:N", "unit:N", "Country:N", "code:N", "Value:Q", "Rank:Q"]
     ).transform_lookup(
         lookup='properties.ISIPEDIA',
         from_=alt.LookupData(ranking_data, 'Code', ranking_data.columns.tolist())
