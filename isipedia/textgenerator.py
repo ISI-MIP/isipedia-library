@@ -372,7 +372,7 @@ def main():
     for indicator in o.indicators:
 
         if o.ranking:
-            preprocess_ranking(indicator, o.cube_path, o.out_cube_path)
+            preprocess_ranking(indicator, o.cube_path)
             if o.no_markdown:
                 pass
 
