@@ -149,6 +149,7 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
 
     # used by the figures
     countrymasksnc = nc.Dataset(os.path.join(countrymasks_folder, 'countrymasks.nc'))
+    countries = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
     mapdata = MapData(indicator, study_type, cube_folder)
 
 
@@ -157,6 +158,7 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
 
         # add global context
         context.countrymasksnc = countrymasksnc
+        context.countries = countries
         context.mapdata = mapdata
         context.ranking = ranking
         # context.folder = os.path.join(cube_folder, indicator, study_type, area)

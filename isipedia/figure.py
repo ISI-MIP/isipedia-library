@@ -3,7 +3,7 @@ import json
 import hashlib
 import numpy as np
 
-from isipedia.country import country_data_folder
+from isipedia.country import country_data_folder, countrymasks_folder
 
 # plumbing to register figures
 figures_register = {}
@@ -478,53 +478,52 @@ def _rankingmap_mpl(countrymasksnc, ranking, x, scenario=None, method='number', 
     return fig
 
 
+def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', title='', label=''):
+    # Adapted from https://altair-viz.github.io/gallery/index.html
+
+    import pandas as pd
+    import altair as alt
+
+    source = alt.Data(values=countries)
+
+    ranking_method = getattr(ranking, method)
+    ranking_data = []
+    for c in countries:
+        area = c['properties']['ISIPEDIA']
+        name = c['properties']['NAME']
+        ranking_data.append((area, ranking_method(area, x, scenario), name))
+
+    ranking_data = pd.DataFrame(ranking_data, columns=["id", "Rank", "Country"])
+
+    chart = alt.Chart(source).mark_geoshape(stroke='black').encode(
+        color="Rank:Q",
+        tooltip=["Rank:Q", "Country:N"]
+    ).transform_lookup(
+        lookup='properties.ISIPEDIA',
+        from_=alt.LookupData(ranking_data, 'id', ['Rank'])
+    ).transform_lookup(
+        lookup='properties.ISIPEDIA',
+        from_=alt.LookupData(ranking_data, 'id', ['Country'])
+    ).project(
+        'naturalEarth1'
+    ).properties(width=600, height=400).configure_view(stroke=None)
+
+    return chart
+
+
 @isipediafigure(name='rankingmap')
 class RankingMap(SuperFig):
-    backend = 'mpl'
+    backend = 'vl'
 
     def make(self, variable, *args, **kwargs):
-        return _rankingmap_mpl(self.context.countrymasksnc, self.context.ranking[variable.replace('-','_')], *args, **kwargs)
+        # return _rankingmap_mpl(self.context.countrymasksnc, self.context.ranking[variable.replace('-','_')], *args, **kwargs)
+        return _rankingmap_altair(self.context.countries, self.context.ranking[variable.replace('-','_')], *args, **kwargs)
 
     def figcode(self, variable, x, **kwargs):
         kwargs['x'] = x
         kwargs['variable'] = variable   # string
         return _hashsum(kwargs)
 
-
-## TODO: get geojson into altair
-
-# def _rankingmap_altair(countrymasksnc, ranking, x, scenario=None, method='number', title='', label=''):
-#     import pandas as pd
-#     import altair as alt
-#     # Adapted from https://altair-viz.github.io/gallery/index.html
-
-#     data, mask = _get_ranking_data(countrymasksnc, ranking, x, scenario, method)
-
-#     # Natural Earth Dataset uses ISO country numbers as IDs
-#     ranking_data = pd.DataFrame([
-#         (156, 1, "China"),
-#         (840, 2, "USA"),
-#         (76, 3, "Brazil")
-#     ], columns=["id", "Rank", "Country"])
-
-#     # Source of land data
-#     source = alt.topo_feature("https://vega.github.io/vega-datasets/data/world-110m.json", 'countries')
-
-#     # Layering and configuring the components
-#     chart = alt.Chart(source).mark_geoshape(stroke='black').encode(
-#         color="Rank:O",
-#         tooltip=["Rank:O", "Country:N"]
-#     ).transform_lookup(
-#         lookup='id',
-#         from_=alt.LookupData(ranking_data, 'id', ['Rank'])
-#     ).transform_lookup(
-#         lookup='id',
-#         from_=alt.LookupData(ranking_data, 'id', ['Country'])
-#     ).project(
-#         'naturalEarth1'
-#     ).properties(width=600, height=400).configure_view(stroke=None)        
-
-#     return chart
 
 
 class MapBounds:
