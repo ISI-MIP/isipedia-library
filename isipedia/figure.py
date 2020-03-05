@@ -656,14 +656,98 @@ def _countrymap(mapdata, countrymasksnc, jsfile, x=None, scenario=None, climate=
     return fig
 
 
+def _countrymap_altair(mapdata, countrymasksnc, jsfile, x=None, scenario=None, climate=None, impact=None, title='', label=''):
+    """
+    """
+    import altair as alt
+    import numpy as np
+    import pandas as pd
+
+    area = jsfile.area
+
+    name, ext = os.path.splitext(os.path.basename(jsfile.filename))
+    if name.endswith(area):
+        name = name[:-len(area)-1]
+
+    bnds = mapdata.bounds(area)
+    worldmap = mapdata.get(name, x, scenario, climate, impact)
+    localmap = bnds.extract(worldmap)
+    if 'm_'+area in countrymasksnc.variables:
+        mask = bnds.extract(countrymasksnc['m_'+area]) > 0
+    elif area == 'world':
+        mask = np.zeros_like(worldmap, dtype=bool)
+        for k in countrymasksnc.variables:
+            if not k.startswith('m_'): 
+                continue
+            mask[countrymasksnc[k][:]>0] = True
+    else:
+        mask = np.ones_like(worldmap, dtype=bool)
+
+    ni, nj = localmap.shape
+    # l, r, b, t = bnds.extent
+    # x = np.linspace(l, r, nj)
+    # y = np.linspace(t, b, ni)
+    l, r, b, t = bnds.indices
+    x = countrymasksnc['lon'][l:r+1]
+    y = countrymasksnc['lat'][t:b+1]
+    X, Y = np.meshgrid(x, y)
+
+
+    # fig, ax = plt.subplots(1,1)
+    # if area != 'world':
+    #     h2 = ax.imshow(localmap, extent=bnds.extent, alpha=0.5) # transparency for outside values
+    # h = ax.imshow(np.ma.array(localmap, mask=~mask), extent=bnds.extent)
+
+    # # default_title = getattr(ranking, 'plot_label_y','')+' :: ranking: '+method
+    # if jsfile.plot_type == 'indicator_vs_temperature':
+    #     details = 'warming level: {} {}'.format(x, jsfile.plot_unit_x)
+    # else:
+    #     details = 'period: {}, scenario: {}'.format(x, {'rcp26':'RCP 2.6', 'rcp45':'RCP 4.5', 'rcp60':'RCP 6', 'rcp85':'RCP 8.5'}.get(scenario, scenario))
+    # if climate: details += ', climate: {}'.format(climate)
+    # if impact: details += ', impact: {}'.format(impact)
+    # default_title = getattr(jsfile, 'plot_label_y','') + '\n' + details
+    # default_label = getattr(jsfile, 'plot_unit_y')
+
+    # ax.set_title(title or default_title)
+    # plt.colorbar(h, ax=ax, orientation='horizontal', label=label or default_label)
+
+    Z = localmap.copy()
+    Z[~mask] = np.nan
+    # Z = mask + 1.
+
+    # Convert this grid to columnar data expected by Altair
+    source = pd.DataFrame({'lon': X.ravel().round(2),
+                         'lat': Y.ravel().round(2),
+                         'z': Z[::-1].ravel()})
+
+
+    chart = alt.Chart(source).mark_rect().encode(
+        x='lon:O',
+        y='lat:O',
+        color=alt.Color('z:Q', title=''),
+        tooltip=[alt.Tooltip('z:Q', title='{} ({})'.format(jsfile.plot_label_y, jsfile.plot_unit_y)), 'lon:Q', 'lat:Q']
+    )    
+
+    return chart
+    # # add country borders
+    # source = alt.Data(values=[c for c in countries if c['properties']['ISIPEDIA']==area])
+    # # source = alt.Data(values=[c for c in js['features']])
+    # borders = alt.Chart(source).mark_geoshape(stroke='black', fill='none', fillOpacity=0)
+    # borders
+
+
+    # return chart + borders
+
+
 
 @isipediafigure(name='countrymap')
 class CountryMap(SuperFig):
-    backend = 'mpl'
+    backend = 'vl'
 
     def make(self, vname, *args, **kwargs):
         jsfile = self._get_json_file(vname)
-        return _countrymap(self.context.mapdata, self.context.countrymasksnc, jsfile, *args, **kwargs)
+        # return _countrymap(self.context.mapdata, self.context.countrymasksnc, jsfile, *args, **kwargs)
+        return _countrymap_altair(self.context.mapdata, self.context.countrymasksnc, jsfile, *args, **kwargs)
 
     def figcode(self, jsfile, x, **kwargs):
         jsfile = self._get_json_file(jsfile)
