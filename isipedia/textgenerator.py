@@ -116,7 +116,7 @@ def select_template(indicator, area=None, templatesdir='templates'):
 
 
 def process_indicator(indicator, cube_folder, country_names=None, study_type='future-projections',
-    templatesdir='templates', fail_on_error=False, makefig=True):
+    templatesdir='templates', fail_on_error=False, makefig=True, png=False):
   
     # Going though all the countries in the list.
     if country_names is None:
@@ -183,7 +183,7 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
         if not os.path.exists(context.folder):
             os.makedirs(context.folder)
 
-        figure_functions = {name:cls(context, makefig) for name, cls in figures_register.items()}
+        figure_functions = {name:cls(context, makefig, png) for name, cls in figures_register.items()}
     
         kwargs = context.variables.copy()
         kwargs.update(figure_functions)
@@ -220,6 +220,7 @@ def main():
     parser.add_argument('--cube-path', default='cube', help='%(default)s')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
     parser.add_argument('--makefig', action='store_true', help='make figures')
+    parser.add_argument('--png', action='store_true', help='store interactive figs to png as well (for markdown rendering)')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
@@ -246,7 +247,7 @@ def main():
             print(studytype)
             try:
                 process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
-                    study_type=studytype, templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig)
+                    study_type=studytype, templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig, png=o.png)
             except Exception as error:
                 raise
                 print(error)

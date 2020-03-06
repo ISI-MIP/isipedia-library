@@ -67,9 +67,10 @@ class SuperFig:
     prefix = ''
     ext = '.png' # static extension
 
-    def __init__(self, context, makefig=True):
+    def __init__(self, context, makefig=True, png=False):
         self.context = context
         self.makefig = makefig
+        self.png = png
 
     def figcode(self, *args, **kwargs):
         "code based on file name and figure arguments"
@@ -132,9 +133,10 @@ class SuperFig:
         elif self.backend == 'vl':
             print('{}: saving json...'.format(type(self)))
             fig.save(path_noext+'.json') # json
-            print('{}: saving png...'.format(type(self)))
-            # fig.save(path_noext+self.ext) # static
-            fig.save(path_noext+'.png', scale_factor=2) # static
+            if self.png:
+                print('{}: saving png...'.format(type(self)))
+                # fig.save(path_noext+self.ext) # static
+                fig.save(path_noext+'.png', scale_factor=2) # static
 
 
 
