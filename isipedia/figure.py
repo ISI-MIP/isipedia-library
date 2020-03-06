@@ -82,14 +82,19 @@ class SuperFig:
     def insert_cmd(self, figid, caption=''):
         return '![{}]({}){{{}}}'.format(caption, self.figpath(figid, relative=True), '#fig:'+figid)
 
+    def caption(self, *args, **kwargs):
+        return 'No Caption.'
+
     def __call__(self, *args, **kwargs):
         # extract markdown parameters
-        caption = kwargs.pop('caption','')
+        caption = kwargs.pop('caption', '')
         figid = kwargs.pop('id', '')
         assert type(figid) is str, 'id parameter must be a string'
         assert type(caption) is str, 'caption parameter must be a string'
         if not figid:
             figid = self.figcode(*args, **kwargs)
+        if not caption:
+            caption = self.caption(*args, **kwargs)
 
         if self.makefig:
             fig = self.make(*args, **kwargs)
@@ -243,6 +248,10 @@ class LinePlotMpl(SuperFig):
         kwargs['filename'] = data.filename
         kwargs['args'] = args
         return _hashsum(kwargs)
+
+    def caption(self, vname, *args, **kwargs):
+        data = self._get_json_file(vname)
+        return data.plot_title
 
 
 def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
@@ -522,7 +531,7 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
         from_=alt.LookupData(ranking_data, 'Code', ranking_data.columns.tolist())
     ).project(
         'naturalEarth1'
-    ).properties(width=600, height=400).configure_view(stroke=None)
+    ).properties(width=600, height=400, title=ranking.plot_title).configure_view(stroke=None)
 
     return chart
 
@@ -540,6 +549,9 @@ class RankingMap(SuperFig):
         kwargs['variable'] = variable   # string
         return _hashsum(kwargs)
 
+    def caption(self, variable, *args, **kwargs):
+        ranking = self.context.ranking[variable.replace('-','_')]
+        return ranking.plot_title
 
 
 class MapBounds:
@@ -726,7 +738,7 @@ def _countrymap_altair(mapdata, countrymasksnc, jsfile, x=None, scenario=None, c
         y='lat:O',
         color=alt.Color('z:Q', title=''),
         tooltip=[alt.Tooltip('z:Q', title='{} ({})'.format(jsfile.plot_label_y, jsfile.plot_unit_y)), 'lon:Q', 'lat:Q']
-    )    
+    ).properties(title=jsfile.plot_title)
 
     return chart
     # # add country borders
@@ -754,3 +766,7 @@ class CountryMap(SuperFig):
         kwargs['x'] = x
         kwargs['filename'] = jsfile.filename
         return _hashsum(kwargs)
+
+    def caption(self, vname, *args, **kwargs):
+        jsfile = self._get_json_file(vname)
+        return jsfile.plot_title
