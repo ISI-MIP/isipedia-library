@@ -8,9 +8,9 @@ import logging
 import netCDF4 as nc
 
 from isipedia.jsonfile import JsonFile
-from isipedia.figure import figures_register, MapData
 from isipedia.country import Country, countrymasks_folder, country_data_folder
 from isipedia.ranking import load_indicator_config, ranking_file, preprocess_ranking, Ranking
+from isipedia.figure import figures_register, MapData
 
 
 class MultiRanking(dict):
@@ -228,6 +228,13 @@ def main():
 
     o = parser.parse_args()
 
+    if os.path.exists('custom.py'):
+        print('custom.py module present in work directory. Load it.')
+        try:
+            import custom
+        except ImportError as error:
+            logging.warning('failed to load custom.py module')
+            logging.warning(str(error))
 
     country_data_folder = os.path.join(countrymasks_folder, 'country_data')
     print('country_data:', country_data_folder)
