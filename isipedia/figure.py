@@ -533,7 +533,21 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
         from_=alt.LookupData(ranking_data, 'Code', ranking_data.columns.tolist())
     ).project(
         'naturalEarth1'
-    ).properties(width=600, height=400, title=ranking.plot_title).configure_view(stroke=None)
+    ).properties(width=800, autosize=alt.AutoSizeParams(contains="padding", type="fit-x"), title=ranking.plot_title
+    # ).configure_view(stroke=None
+    ).configure(background='#F1F4F4'
+    ).configure_title(
+        fontSize=16,
+    ).configure_axis(
+        labelFontSize=14,
+        titleFontSize=16,
+    ).configure_legend(
+        titleFontSize=14,
+        labelFontSize=14,
+    ).configure_mark(
+        fontSize=14
+    ).interactive()
+
 
     return chart
 
@@ -740,7 +754,20 @@ def _countrymap_altair(mapdata, countrymasksnc, jsfile, x=None, scenario=None, c
         y='lat:O',
         color=alt.Color('z:Q', title=''),
         tooltip=[alt.Tooltip('z:Q', title='{} ({})'.format(jsfile.plot_label_y, jsfile.plot_unit_y)), 'lon:Q', 'lat:Q']
-    ).properties(title=jsfile.plot_title)
+    ).properties(title=jsfile.plot_title,
+    width=800, autosize=alt.AutoSizeParams(contains="padding", type="fit-x"), 
+    ).configure(background='#F1F4F4'
+    ).configure_title(
+        fontSize=16,
+    ).configure_axis(
+        labelFontSize=14,
+        titleFontSize=16,
+    ).configure_legend(
+        titleFontSize=14,
+        labelFontSize=14,
+    ).configure_mark(
+        fontSize=14
+    ).interactive()
 
     return chart
     # # add country borders
