@@ -280,6 +280,16 @@ class LinePlotMpl(SuperFig):
         return data.plot_title
 
 
+scenario_map = {
+    'historical':'Historical',
+    'rcp26':'RCP 2.6',
+    'rcp60':'RCP 6',
+    # 'rcp26':'Low emissions',
+    # 'rcp60':'Buisness as usual',
+    # 'rcp26':'Low emission scenario (RCP 2.6)',
+    # 'rcp60':'Buisness as usual (RCP 6.0)',
+}
+
 def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
 
     df0 = data.to_pandas()
@@ -290,9 +300,9 @@ def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None
     d = []
     for scenario in df0.index.levels[0]:
         df = df0.loc[scenario]
-        lower = df.min(axis=0)
-        upper = df.max(axis=0)
-        median = df.loc['median', 'median']
+        lower = df.min(axis=0) / 100 # % format
+        upper = df.max(axis=0) / 100
+        median = df.loc['median', 'median']  / 100
         df2 = pd.DataFrame({'lower':lower, 'upper':upper, 'median':median, 'scenario': scenario})
         d.append(df2.loc['1901-1920':'2081:2100'])
         
@@ -303,13 +313,6 @@ def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None
     x = [xx.split('-') for xx in df2['x']]
     df2['x'] = [(int(y1)+int(y2)-1)//2 for y1, y2 in x]
 
-    scenario_map = {
-        'historical':'Historical',
-        'rcp26':'Low emissions',
-        'rcp60':'Buisness as usual',
-        # 'rcp26':'Low emission scenario (RCP 2.6)',
-        # 'rcp60':'Buisness as usual (RCP 6.0)',
-    }
 
     df2 = df2.replace(scenario_map)
 
@@ -321,8 +324,10 @@ def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None
                       scale=alt.Scale(domain=list(scenario_map.values()), 
                                       range=['#4674b9','#80b946','orange']))
 
-    axisX = alt.X('x:Q', title=xlabel or 'Time', scale=alt.Scale(domain=[1900, 2100]))
-
+    # axisX = alt.X('x:Q', title=xlabel or 'Time', scale=alt.Scale(domain=[1900, 2100]))
+    axisX = alt.X('x:Q', title=xlabel or 'Time', scale=alt.Scale(domain=[1900, 2100]), axis=alt.Axis(format="i", values=np.arange(1900, 2100+1, 20).tolist()))
+    axisY = alt.Y('median:Q', title=data.plot_unit_y or ylabel, axis=alt.Axis(format='%'))
+    
     base = alt.Chart(df2)
 
     lines = base.mark_line().encode(
@@ -333,18 +338,18 @@ def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None
     )
     points = base.mark_point(size=60).encode(
         x = axisX,
-        y = alt.Y('median:Q'),
+        y = axisY,
         color = color,
         tooltip=[
                  alt.Tooltip('scenario:O'), 
                  alt.Tooltip('x:Q', title=xlabel or 'Time'), 
-                 alt.Tooltip('median:Q', format='.1f'), 
-                 alt.Tooltip('lower:Q', format='.1f'), 
-                 alt.Tooltip('upper:Q', format='.1f')],
+                 alt.Tooltip('median:Q', format='.1%'), 
+                 alt.Tooltip('lower:Q', format='.1%'), 
+                 alt.Tooltip('upper:Q', format='.1%')],
     )
     areas = base.mark_area(opacity=0.2).encode(
         x = axisX,
-        y = alt.Y('lower:Q'),
+        y = axisY,
         y2 = alt.Y2('upper:Q'),
         color = color,
     )
@@ -367,7 +372,7 @@ def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None
 
     # chart = points + lines + areas
     chart = (points + lines + areas + rule + rule_text).properties(
-        title=title,
+        title=title or data.plot_title,
         width=800,
         autosize=alt.AutoSizeParams(contains="padding", type="fit-x"),
     )
@@ -375,39 +380,151 @@ def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None
     return configure_chart(chart).interactive()
 
 
+def _lineplot_altair_time_advanced(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
+    import pandas as pd
+    import altair as alt
+
+    df = pd.concat([pd.DataFrame(l) for l in data.filter_lines()])
+
+    # Divide by 100 so we can percent-format in the plot
+    df.y = df.y / 100
+
+    df["x_range"] = df.x
+    df.x = df.x.apply(lambda x: int(x.split("-")[1]) - 10)
+    df = df[df.x < 2100]
+
+    # Fill in gap by duplicating historical values to future scenarios
+    extra = df[(df.scenario == "historical") & (df.x == 1990)].copy()
+    extra.at[:, "scenario"] = "rcp60"
+    df = df.append(extra)
+    extra = df[(df.scenario == "historical") & (df.x == 1990)].copy()
+    extra.at[:, "scenario"] = "rcp26"
+    df = df.append(extra)
+
+    df["model"] = df.climate + " / " + df.impact
+
+    df = df.replace(scenario_map)
+    # print(df)
+    # ------------------
+    axisX = alt.X('x:Q', title=xlabel or 'Time', scale=alt.Scale(domain=[1900, 2100]), axis=alt.Axis(format="i", values=np.arange(1900, 2100+1, 20).tolist()))
+
+    selection_climate = alt.selection_multi(fields=['scenario'], bind='legend')
+
+    nearest = alt.selection(type='single', nearest=True, on='mouseover',
+                            fields=["x", 'y'], empty='none')
+
+    base = alt.Chart(df[(df.climate != "median")])
+
+    # color = alt.Color('scenario', scale=alt.Scale(scheme="tableau10"))
+    color = alt.Color('scenario', title='Climate Scenario',
+                      # scale=alt.Scale(scheme='tableau10'))
+                      scale=alt.Scale(domain=list(scenario_map.values()), 
+                      # scale=alt.Scale(domain=list(scenario_map.keys()), 
+                                      range=['#4674b9','#80b946','orange']))    
+
+    rule_data = pd.DataFrame({'line': [2005]})
+    rule_text_data = pd.DataFrame([
+        {"year": 1910, "text": "Historical Period"},
+        {"year": 2015, "text": "Future Projections"},
+    ])
+
+    rule = alt.Chart(rule_data).mark_rule().encode(
+        x='line:Q'
+    )
+
+    rule_text = alt.Chart(rule_text_data).mark_text(align="left", dy=-130).encode(
+        x="year",
+        text="text"
+    )
+
+    area = base.mark_area(opacity=0.3).encode(
+        x=axisX,
+        color=color,
+        y=alt.Y(field="y", type="quantitative", axis=alt.Axis(format='%'), aggregate="min"),
+        y2=alt.Y2(field="y", aggregate="max"),
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)),
+    ).add_selection(selection_climate)
+
+    lines = base.mark_line().encode(
+        x=axisX,
+        y=alt.Y("y", axis=alt.Axis(format='%')),
+        detail=["climate", "impact", "scenario"],
+        color=color,
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
+        size=alt.condition("datum.impact == 'median'", alt.value(5), alt.value(1))
+    )
+
+    points = base.mark_point().encode(
+        x=axisX,
+        y=alt.Y("y", axis=alt.Axis(title=data.plot_unit_y, format='%')),
+        detail=["climate", "impact", "scenario"],
+        color=color,
+        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
+        size=alt.value(12),
+    )
+
+    text_model = points.mark_text(align='left', dx=-5, dy=-6).encode(
+        text=alt.condition(nearest, "model", alt.value(' ')),
+        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
+        color=alt.value("black")
+    ).add_selection(nearest)
+
+    text_pct = points.mark_text(align='left', dx=-5, dy=6).encode(
+        text=alt.condition(nearest, "y", alt.value(' '), format=".2p"),
+        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
+        color=alt.value("black")
+    )
+
+
+    chart = (area + rule + rule_text +  lines + points + text_model + text_pct).properties(
+        title=title or data.plot_title,
+        width=800,
+        autosize=alt.AutoSizeParams(contains="padding", type="fit-x"),
+    )
+
+    # chart.save("chart.json")
+    return configure_chart(chart).interactive()
+
+
+
 def _lineplot_altair_temp(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
     
     # median data
     df = data.to_pandas().loc[scenario]
-    lower = df.min(axis=0)
-    upper = df.max(axis=0)
-    median = df.loc['median', 'median']
-    df2 = pd.DataFrame({'lower':lower, 'upper':upper, 'median':median}).reset_index()
-
-    if data.plot_type == 'indicator_vs_timeslices':
-        x = [xx.split('-') for xx in df2['x']]
-        df2['x'] = [(int(y1)+int(y2))/2 for y1, y2 in x]
-        axisX = alt.X('x:Q', title=xlabel, scale=alt.Scale(domain=[1900, 2100]))
-    else:
-        axisX = alt.X('x:Q', title=xlabel, scale=alt.Scale(domain=[0, df2['x'].max()]))
-
-    # print(df2)
+    lower = df.min(axis=0) / 100
+    upper = df.max(axis=0) / 100
+    median = df.loc['median', 'median'] / 100
+    df2 = pd.DataFrame({'lower':lower, 'upper':upper, 'median':median, 'climate':'Median'}).reset_index() 
 
     if not title:
         title = data.plot_title
     if not xlabel: 
         xlabel = '{} ({})'.format(data.plot_label_x, data.plot_unit_x)
+        # xlabel = data.plot_unit_x
     if not ylabel: 
         # ylabel = '{} ({})'.format(data.plot_label_y, data.plot_unit_y)
         ylabel = data.plot_unit_y
+
+    # if data.plot_type == 'indicator_vs_timeslices':
+    #     x = [xx.split('-') for xx in df2['x']]
+    #     df2['x'] = [(int(y1)+int(y2))/2 for y1, y2 in x]
+    #     axisX = alt.X('x:Q', title=xlabel, scale=alt.Scale(domain=[1900, 2100]))
+    # else:
+    axisX = alt.X('x:Q', title=xlabel, scale=alt.Scale(domain=[0, df2['x'].max()]), axis=alt.Axis(values=data.x))
 
     base = alt.Chart(df2)
 
     nearest = alt.selection(type='single', nearest=True, on='mouseover', empty='none')
     #                             fields=["x", "median"], empty='none')
 
-    axisY = alt.Y('median:Q', title=ylabel)
+    # axisY = alt.Y('median:Q', title=ylabel, axis=alt.Y(format='%'))
+    axisY = alt.Y('median:Q', title=ylabel, axis=alt.Axis(format='%'))
+
     color = 'orange'
+    color2 = alt.Color('climate', title='Climate Model',
+                      # scale=alt.Scale(scheme='tableau10'))
+                      scale=alt.Scale(domain=['Median'], 
+                                      range=[color]))
 
     area = base.mark_area(opacity=0.3, color=color).encode(
         x=axisX,
@@ -420,10 +537,11 @@ def _lineplot_altair_temp(data, x=None, scenario=None, climate=None, impact=None
         y=axisY,
     )
 
-    points = base.mark_point(color=color, size=60).encode(
+    points = base.mark_point(size=60).encode(
         x=axisX,
         y=axisY,
-        tooltip=[alt.Tooltip('x:Q', title=xlabel), alt.Tooltip('median:Q', title=ylabel, format='.1f')],
+        color=color2,
+        tooltip=[alt.Tooltip('x:Q', title=xlabel), alt.Tooltip('median:Q', title=ylabel, format='.1%')],
     )
 
     chart = (points + lines + area).properties(
@@ -460,106 +578,6 @@ class LinePlot(SuperFig):
 
 
 
-def _lineplot_altair_time_advanced(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
-    import pandas as pd
-    import altair as alt
-
-    df = pd.concat([pd.DataFrame(l) for l in data.filter_lines()])
-
-    # Divide by 100 so we can percent-format in the plot
-    df.y = df.y / 100
-
-    df["x_range"] = df.x
-    df.x = df.x.apply(lambda x: int(x.split("-")[1]) - 10)
-    df = df[df.x < 2100]
-
-    # Fill in gap by duplicating historical values to future scenarios
-    extra = df[(df.scenario == "historical") & (df.x == 1990)].copy()
-    extra.at[:, "scenario"] = "rcp60"
-    df = df.append(extra)
-    extra = df[(df.scenario == "historical") & (df.x == 1990)].copy()
-    extra.at[:, "scenario"] = "rcp26"
-    df = df.append(extra)
-
-    df["model"] = df.climate + " / " + df.impact
-
-    df.head(10)
-
-    # ------------------
-
-    selection_climate = alt.selection_multi(fields=['scenario'], bind='legend')
-
-    nearest = alt.selection(type='single', nearest=True, on='mouseover',
-                            fields=["x", 'y'], empty='none')
-
-    base = alt.Chart(df[(df.climate != "median")])
-
-    color = alt.Color('scenario', scale=alt.Scale(scheme="tableau10"))
-
-    rule_data = pd.DataFrame({'line': [2005]})
-    rule_text_data = pd.DataFrame([
-        {"year": 1910, "text": "Historical Period"},
-        {"year": 2015, "text": "Future Projections"},
-    ])
-
-    rule = alt.Chart(rule_data).mark_rule().encode(
-        x='line:Q'
-    )
-
-    rule_text = alt.Chart(rule_text_data).mark_text(align="left", dy=-130).encode(
-        x="year",
-        text="text"
-    )
-
-    area = base.mark_area(opacity=0.3).encode(
-        x=alt.X("x", axis=alt.Axis(format="i"), scale=alt.Scale(domain=[1900, 2100])),
-        color=color,
-        y=alt.Y(field="y", type="quantitative", axis=alt.Axis(format='%'), aggregate="min"),
-        y2=alt.Y2(field="y", aggregate="max"),
-        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)),
-    ).add_selection(selection_climate)
-
-    lines = base.mark_line().encode(
-        x=alt.X("x"),
-        y=alt.Y("y", axis=alt.Axis(format='%')),
-        detail=["climate", "impact", "scenario"],
-        color=color,
-        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
-        size=alt.condition("datum.impact == 'median'", alt.value(5), alt.value(1))
-    )
-
-    points = base.mark_point().encode(
-        x=alt.X("x", axis=alt.Axis(title=data.plot_unit_x)),
-        y=alt.Y("y", axis=alt.Axis(title=data.plot_unit_y, format='%')),
-        detail=["climate", "impact", "scenario"],
-        color=color,
-        opacity=alt.condition(selection_climate, alt.value(0.3), alt.value(0)), 
-        size=alt.value(12),
-    )
-
-    text_model = points.mark_text(align='left', dx=-5, dy=-6).encode(
-        text=alt.condition(nearest, "model", alt.value(' ')),
-        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
-        color=alt.value("black")
-    ).add_selection(nearest)
-
-    text_pct = points.mark_text(align='left', dx=-5, dy=6).encode(
-        text=alt.condition(nearest, "y", alt.value(' '), format=".2p"),
-        opacity=alt.condition(selection_climate, alt.value(1), alt.value(0)),
-        color=alt.value("black")
-    )
-
-
-    chart = (area + rule + rule_text +  lines + points + text_model + text_pct).properties(
-        title=data.plot_title,
-        width=800,
-        autosize=alt.AutoSizeParams(contains="padding", type="fit-x"),
-    ).configure(background='#F1F4F4').interactive()
-
-    # chart.save("chart.json")
-    return chart
-
-
 def _lineplot_altair_temp_advanced(data, x=None, scenario=None, climate=None, impact=None, shading=False, title='', xlabel='', ylabel=''):
     import pandas as pd
     import altair as alt
@@ -578,7 +596,7 @@ def _lineplot_altair_temp_advanced(data, x=None, scenario=None, climate=None, im
 
     base = alt.Chart(df[(df.climate != "median")])
 
-    color = alt.Color('climate', scale=alt.Scale(scheme="dark2"))
+    color = alt.Color('climate', scale=alt.Scale(scheme="dark2"), title='Climate Model')
 
     area = base.mark_area(opacity=0.3).encode(
         x=alt.X("x", scale=alt.Scale(domain=[0, df['x'].max()])),
@@ -598,7 +616,7 @@ def _lineplot_altair_temp_advanced(data, x=None, scenario=None, climate=None, im
     )
 
     points = base.mark_point().encode(
-        x=alt.X("x", axis=alt.Axis(title=data.plot_unit_x, values=data.x)),
+        x=alt.X("x", axis=alt.Axis(title=xlabel or '{} ({})'.format(data.plot_label_x, data.plot_unit_x), values=data.x)),
         y=alt.Y("y", axis=alt.Axis(title=data.plot_unit_y, format='%')),
         detail=["climate", "impact"],
         color=color,
@@ -622,9 +640,9 @@ def _lineplot_altair_temp_advanced(data, x=None, scenario=None, climate=None, im
         title=data.plot_title,
         width=800,
         autosize=alt.AutoSizeParams(contains="padding", type="fit-x"),
-    ).configure(background='#F1F4F4').interactive()
+    )
 
-    return chart
+    return configure_chart(chart).interactive()
 
 
 @isipediafigure(name='lineplot_advanced')
@@ -993,3 +1011,13 @@ class CountryMap(SuperFig):
     def caption(self, vname, *args, **kwargs):
         jsfile = self._get_json_file(vname)
         return jsfile.plot_title
+
+
+@isipediafigure(name='countrymap_mpl')
+class CountryMapMpl(CountryMap):
+    backend = 'mpl'
+
+    def make(self, vname, *args, **kwargs):
+        jsfile = self._get_json_file(vname)
+        return _countrymap(self.context.mapdata, self.context.countrymasksnc, jsfile, *args, **kwargs)
+        # return _countrymap_altair(self.context.mapdata, self.context.countrymasksnc, jsfile, *args, **kwargs)
