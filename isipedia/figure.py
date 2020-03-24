@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import numpy as np
+import logging
 
 import pandas as pd
 import altair as alt
@@ -713,6 +714,9 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
     for c in countries:
         area = c['properties']['ISIPEDIA']
         name = c['properties']['NAME']
+        if area not in ranking.areas:
+            logging.warning('missing area for ranking: '+area)
+            continue
         value = ranking.value(area, x, scenario)
         if value is not None:
             value = round(value, 2)
@@ -744,7 +748,8 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
         labelFontSize=14,
     ).configure_mark(
         fontSize=14
-    ).interactive()
+    )
+    # ).interactive()
 
 
     return chart
