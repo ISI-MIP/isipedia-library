@@ -349,7 +349,7 @@ def _lineplot_altair_time(data, x=None, scenario=None, climate=None, impact=None
     )
     areas = base.mark_area(opacity=0.2).encode(
         x = axisX,
-        y = axisY,
+        y = alt.Y('lower:Q'),
         y2 = alt.Y2('upper:Q'),
         color = color,
     )
