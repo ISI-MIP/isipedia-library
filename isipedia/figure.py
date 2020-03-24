@@ -91,13 +91,13 @@ class SuperFig:
 
     def __call__(self, *args, **kwargs):
         # extract markdown parameters
-        caption = kwargs.pop('caption', '')
+        caption = kwargs.pop('caption', None)
         figid = kwargs.pop('id', '')
         assert type(figid) is str, 'id parameter must be a string'
-        assert type(caption) is str, 'caption parameter must be a string'
+        assert caption is None or type(caption) is str, 'caption parameter must be a string'
         if not figid:
             figid = self.figcode(*args, **kwargs)
-        if not caption:
+        if caption is None:
             caption = self.caption(*args, **kwargs)
 
         if self.makefig:
@@ -497,10 +497,9 @@ def _lineplot_altair_time_advanced(data, x=None, scenario=None, climate=None, im
 
     rule_data = pd.DataFrame({'line': [2005]})
     rule_text_data = pd.DataFrame([
-        {"year": 1870, "text": "Historical Period"},
-        {"year": 2010, "text": "Future Projections"},
+        {"year": 1910, "text": "Historical Period"},
+        {"year": 2015, "text": "Future Projections"},
     ])
-        
 
     rule = alt.Chart(rule_data).mark_rule().encode(
         x='line:Q'
@@ -512,7 +511,7 @@ def _lineplot_altair_time_advanced(data, x=None, scenario=None, climate=None, im
     )
 
     area = base.mark_area(opacity=0.3).encode(
-        x=alt.X("x", axis=alt.Axis(format="i")),
+        x=alt.X("x", axis=alt.Axis(format="i"), scale=alt.Scale(domain=[1900, 2100])),
         color=color,
         y=alt.Y(field="y", type="quantitative", axis=alt.Axis(format='%'), aggregate="min"),
         y2=alt.Y2(field="y", aggregate="max"),
@@ -581,7 +580,7 @@ def _lineplot_altair_temp_advanced(data, x=None, scenario=None, climate=None, im
     color = alt.Color('climate', scale=alt.Scale(scheme="dark2"))
 
     area = base.mark_area(opacity=0.3).encode(
-        x=alt.X("x", scale=alt.Scale(domain=(-0.1, 4.1))),
+        x=alt.X("x", scale=alt.Scale(domain=[0, df['x'].max()])),
         color=color,
         y=alt.Y(field="y", type="quantitative", axis=alt.Axis(format='%'), aggregate="min"),
         y2=alt.Y2(field="y", aggregate="max"),
