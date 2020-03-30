@@ -92,6 +92,10 @@ def select_template(indicator, area=None, templatesdir='templates'):
     candidates = [
         '{templatesdir}/{indicator}/{indicator}_{area}.md'.format(indicator=indicator, area=area, templatesdir=templatesdir),
         '{templatesdir}/{indicator}/{indicator}.md'.format(indicator=indicator, templatesdir=templatesdir),
+        '{templatesdir}/{indicator}_{area}.md'.format(indicator=indicator, area=area, templatesdir=templatesdir),
+        '{templatesdir}/{indicator}.md'.format(indicator=indicator, templatesdir=templatesdir),
+        '{indicator}_{area}.md'.format(indicator=indicator, area=area, templatesdir=templatesdir),
+        '{indicator}.md'.format(indicator=indicator, templatesdir=templatesdir),
     ]
     for candidate in candidates:
         if os.path.exists(candidate):
@@ -140,7 +144,7 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
 
     # load country ranking
     ranking = MultiRanking()
-    for name in stype['ranking-files']:
+    for name in stype.get('ranking-files', []):
         fname = ranking_file(indicator, study_type, name, cube_folder)
         if not os.path.exists(fname):
             logging.warning('ranking file does not exist: '+fname)
@@ -181,8 +185,7 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
         # tmpl = env.get_template(tmplfile)
         ranking.area = area # predefine area 
 
-        if not os.path.exists(context.folder):
-            os.makedirs(context.folder)
+        os.makedirs(context.folder, exist_ok=True)
 
         figure_functions = {name:cls(context, makefig, png) for name, cls in figures_register.items()}
     
@@ -190,7 +193,8 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
         kwargs.update(figure_functions)
 
         text = tmpl.render(country=context.country, ranking=ranking, 
-            indicator=meta_indicator, studytype=meta_studytype, **kwargs)
+            indicator=meta_indicator, studytype=meta_studytype, 
+            config=cfg, **kwargs)
 
         md_file = os.path.join(context.folder, '{indicator}-{area}.md'.format(indicator=indicator, area=area))
         with open(md_file, 'w') as f:
