@@ -84,8 +84,8 @@ class SuperFig:
     def figpath(self, figid, relative=False):
         return os.path.join('' if relative else self.context.folder, 'figures', figid+'-'+self.backend +self.ext)
 
-    def insert_cmd(self, figid, caption=''):
-        return '![{}]({}){{{}}}'.format(caption, self.figpath(figid, relative=True), '#fig:'+figid)
+    def insert_cmd(self, figid, caption='', crossref=False):
+        return ('![{}]({}){{{}}}' if crossref else '![{}]({})').format(caption, self.figpath(figid, relative=True), '#fig:'+figid)
 
     def caption(self, *args, **kwargs):
         return 'No Caption.'
@@ -94,6 +94,7 @@ class SuperFig:
         # extract markdown parameters
         caption = kwargs.pop('caption', None)
         figid = kwargs.pop('id', '')
+        crossref = kwargs.pop('crossref', True)
         assert type(figid) is str, 'id parameter must be a string'
         assert caption is None or type(caption) is str, 'caption parameter must be a string'
         if not figid:
@@ -151,9 +152,9 @@ def _maybe_createdir(path):
     return path
 
 
-def configure_chart(chart):
+def configure_chart(chart, background='#F1F4F4'):
     "common fonts etc... to all figures "
-    return chart.configure(background='#F1F4F4',
+    return chart.configure(background=background,
     ).configure_header(
     titleFont="IBM Plex Sans",
     titleFontSize=20,
@@ -732,6 +733,7 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
     for c in countries:
         area = c['properties']['ISIPEDIA']
         name = c['properties']['NAME']
+        print(area)
         if area not in ranking.areas:
             logging.warning('missing area for ranking: '+area)
             continue
