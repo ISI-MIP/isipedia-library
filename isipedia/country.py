@@ -3,10 +3,15 @@
 import os, sys, logging
 
 # find out the appropriate paths
+found = False
 for test in ['countrymasks', '../countrymasks', '../../countrymasks']:
     if os.path.exists(test):
+        logging.info('append '+test+' to path')
         sys.path.append(test)
+        found = True
         break
+
+if not found: logging.warning('countrymasks repository was not found')
 
 try:
     import country_data
