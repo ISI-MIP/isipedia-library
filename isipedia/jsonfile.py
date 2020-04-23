@@ -75,6 +75,21 @@ class JsonFile:
     def lines(self):
         return [self.loc(scenario, climate, impact) for scenario, climate, impact in self._indices]
 
+
+    def apply(self, func, inplace=False):
+        import copy
+        if inplace:
+            v = self
+        else:
+            v = copy.deepcopy(self)
+        for line in v.lines:
+            for key in ['y','upper','lower']:
+                y = line[key]
+                for i in range(len(y)):
+                    if y[i] is not None:
+                        y[i] = func(y[i])
+
+
     def to_array(self, field='y'):
         import numpy as np        
         cube = np.empty(tuple(self.shape) + (len(self.x), ))
