@@ -49,12 +49,17 @@ class Indicator:
 class TemplateContext:
     """template data accessible within jinja2 and provided to various functions such as figures
     """
-    def __init__(self, indicator, studytype, area, cube_folder='cube'):
+    def __init__(self, indicator, studytype, area, cube_folder='cube', config=None, ranking=None):
         self.indicator = indicator
         self.studytype = studytype
         self.area = area
         self.cube_folder = cube_folder
         self.folder = os.path.join(cube_folder, indicator, studytype, area)
+        self.config = config or load_indicator_config(indicator, cube_folder)
+        if ranking:
+            ranking.area = area # predefine area 
+        self.ranking = ranking
+
 
     def jsonfile(self, name):
         return os.path.join(self.cube_folder, self.indicator, self.studytype, self.area, name+'_'+self.area+'.json')
@@ -80,12 +85,30 @@ class TemplateContext:
             # raise
             self.country = Country("undefined")
 
+
+    def template_kwargs(self):
+        figure_functions = {name:cls(self) for name, cls in figures_register.items()}
+        markdown_commands = {name:functools.partial(func, self) for name, func in commands_register.items()}
+        stype = self.config['study-types'][[s['directory'] for s in self.config['study-types']].index(self.studytype)]
+        kwargs = self.variables.copy()
+        kwargs.update(figure_functions)
+        kwargs.update(markdown_commands)
+        kwargs.update(dict(
+            country=self.country, 
+            indicator=Indicator(self.indicator, self.config.get('name')),
+            studytype=StudyType(self.studytype, stype.get('name')),
+            config=self.config,
+            ranking=self.ranking,
+            ))
+        return kwargs
+
+
     def __getattr__(self, name):
         return self.variables[name]
 
 
-def load_template_context(indicator, study_type, area, cube_folder='cube'):
-    context = TemplateContext(indicator, study_type, area, cube_folder)
+def load_template_context(indicator, study_type, area, cube_folder='cube', **kwargs):
+    context = TemplateContext(indicator, study_type, area, cube_folder, **kwargs)
     context.load_json_files()
     context.load_country_stats()
     return context
@@ -141,9 +164,6 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
     if not found:
         raise ValueError('studytype not defined in config.json file: '+repr(study_type))
 
-    # metadata
-    meta_indicator = Indicator(indicator, cfg.get('name'))
-    meta_studytype = StudyType(study_type, stype.get('name'))
 
     # load country ranking
     ranking = MultiRanking()
@@ -172,7 +192,7 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
 
 
     def process_area(area):
-        context = load_template_context(indicator, study_type, area, cube_folder)
+        context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking)
 
         # add global context
         if makefig:
@@ -180,7 +200,6 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
             context.countries = countries
             context.countries_simple = countries_simple
             context.mapdata = mapdata
-            context.ranking = ranking
             context.makefig = makefig
             context.png = png
 
@@ -190,20 +209,12 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
 
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
-        ranking.area = area # predefine area 
 
         os.makedirs(context.folder, exist_ok=True)
 
-        figure_functions = {name:cls(context) for name, cls in figures_register.items()}
-        markdown_commands = {name:functools.partial(func, context) for name, func in commands_register.items()}
-    
-        kwargs = context.variables.copy()
-        kwargs.update(figure_functions)
-        kwargs.update(markdown_commands)
+        kwargs = context.template_kwargs()
 
-        text = tmpl.render(country=context.country, ranking=ranking, 
-            indicator=meta_indicator, studytype=meta_studytype, 
-            config=cfg, **kwargs)
+        text = tmpl.render(**kwargs)
 
         md_file = os.path.join(context.folder, '{indicator}-{area}.md'.format(indicator=indicator, area=area))
         with open(md_file, 'w') as f:
