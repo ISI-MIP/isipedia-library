@@ -6,12 +6,14 @@ import glob
 import shutil
 import jinja2
 import logging
+import functools
 import netCDF4 as nc
 
 from isipedia.jsonfile import JsonFile
 from isipedia.country import Country, countrymasks_folder, country_data_folder
 from isipedia.ranking import load_indicator_config, ranking_file, preprocess_ranking, Ranking
-from isipedia.figure import figures_register, MapData
+from isipedia.figure import MapData
+from isipedia.command import contexts_register, commands_register, figures_register
 
 
 class MultiRanking(dict):
@@ -179,19 +181,25 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
             context.countries_simple = countries_simple
             context.mapdata = mapdata
             context.ranking = ranking
-        # context.folder = os.path.join(cube_folder, indicator, study_type, area)
+            context.makefig = makefig
+            context.png = png
+
+        # extend markdown context with custom values
+        for f in contexts_register:
+            f(context)
 
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
-        # tmpl = env.get_template(tmplfile)
         ranking.area = area # predefine area 
 
         os.makedirs(context.folder, exist_ok=True)
 
-        figure_functions = {name:cls(context, makefig, png) for name, cls in figures_register.items()}
+        figure_functions = {name:cls(context) for name, cls in figures_register.items()}
+        markdown_commands = {name:functools.partial(func, context) for name, func in commands_register.items()}
     
         kwargs = context.variables.copy()
         kwargs.update(figure_functions)
+        kwargs.update(markdown_commands)
 
         text = tmpl.render(country=context.country, ranking=ranking, 
             indicator=meta_indicator, studytype=meta_studytype, 

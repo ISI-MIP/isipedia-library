@@ -8,18 +8,7 @@ import pandas as pd
 import altair as alt
 
 from isipedia.country import country_data_folder, countrymasks_folder
-
-# plumbing to register figures
-figures_register = {}
-
-def isipediafigure(name):
-    """decorator to register the figure names and make them available in jinja2
-    """
-    def decorator(cls):
-        figures_register[name] = cls
-        return cls
-
-    return decorator
+from isipedia.command import figures_register, isipediafigure
 
 
 class NpEncoder(json.JSONEncoder):
@@ -71,10 +60,10 @@ class SuperFig:
     prefix = ''
     ext = '.png' # static extension
 
-    def __init__(self, context, makefig=True, png=False):
+    def __init__(self, context):
         self.context = context
-        self.makefig = makefig
-        self.png = png
+        self.makefig = context.makefig
+        self.png = context.png
 
     def figcode(self, *args, **kwargs):
         "code based on file name and figure arguments"
