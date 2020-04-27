@@ -12,7 +12,7 @@ for test in ['isipedia.org', '../isipedia.org', '../../isipedia.org', '../../../
 if not found: logging.warning('isipedia.org was not found')
 
 try:
-    from process_articles import Article, convert_figures, main
+    from process_articles import Article, convert_figures, main, Study
 except ImportError:
     logging.warning('failed import process_articles')
     raise
