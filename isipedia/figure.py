@@ -720,9 +720,9 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
     ranking_method = getattr(ranking, method)
     ranking_data = []
     for c in countries:
-        area = c['properties']['ISIPEDIA']
+        area = c['properties']['ISIPEDIA'].lower()
         name = c['properties']['NAME']
-        print(area)
+        # print(area)
         if area not in ranking.areas:
             logging.warning('missing area for ranking: '+area)
             continue
