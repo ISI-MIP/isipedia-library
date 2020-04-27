@@ -8,6 +8,7 @@ import jinja2
 import logging
 import functools
 import netCDF4 as nc
+import frontmatter
 
 from isipedia.jsonfile import JsonFile
 from isipedia.country import Country, countrymasks_folder, country_data_folder
@@ -15,6 +16,7 @@ from isipedia.ranking import load_indicator_config, ranking_file, preprocess_ran
 from isipedia.figure import MapData
 from isipedia.command import contexts_register, commands_register, figures_register
 from isipedia.web import Study, Article
+from process_article import fix_metadata
 
 
 class MultiRanking(dict):
@@ -88,6 +90,13 @@ class TemplateContext:
             # raise
             self.country = Country("undefined")
 
+
+    @property
+    def metadata(self):
+        kw = self.config.copy()
+        kw['area'] = area
+        fix_metadata(kw)
+        return kw
 
     def template_kwargs(self):
         figure_functions = {name:cls(self) for name, cls in figures_register.items()}
@@ -208,9 +217,12 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
 
         text = tmpl.render(**kwargs)
 
-        md_file = os.path.join(context.folder, '{indicator}-{area}.md'.format(indicator=indicator, area=area))
-        with open(md_file, 'w') as f:
-            f.write(text)
+        md_file = os.path.join(context.folder, '.{indicator}_{area}.md'.format(indicator=indicator, area=area))
+
+        post = frontmatter.Post(text, **context.metadata)
+        frontmatter.dump(post, md_file)
+        #with open(md_file, 'w') as f:
+        #    f.write(text)
 
         # copy along javascript?
         javascript2 = javascript or []
