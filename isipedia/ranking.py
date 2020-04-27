@@ -1,6 +1,7 @@
 """Related to ranking data
 """
 import json
+import yaml
 import os
 import glob
 import logging
@@ -64,11 +65,11 @@ def calculate_ranking(var, cube_path, country_names=None):
     return data
 
 
-def load_indicator_config(indicator, cube_path):
-    cfgfile = os.path.join(cube_path, indicator, 'config.json')
+def load_indicator_config(indicator):
+    cfgfile = os.path.join(indicator+'.yml')
     if not os.path.exists(cfgfile):
         logging.warn('no config file present for '+indicator)
-    return json.load(open(cfgfile))
+    return yaml.load(open(cfgfile))
 
 
 def ranking_file(indicator, category, variable, cube_path):
@@ -80,19 +81,18 @@ def preprocess_ranking(indicator, cube_path, out_cube_path=None, country_names=N
     if out_cube_path is None:
         out_cube_path = cube_path
 
-    cfg = load_indicator_config(indicator, cube_path)
+    cfg = load_indicator_config(indicator)
+    category = cfg['studytype']
 
-    for study in cfg['study-types']:
-        for name in study['ranking-files']:
-            category = study['directory']
-            print(indicator, category, name)
-            var = CubeVariable(indicator, category, name)
-            data = calculate_ranking(var, cube_path, country_names=country_names)
-            fname = ranking_file(indicator, category, name, out_cube_path)
-            dname = os.path.dirname(fname)
-            if not os.path.exists(dname):
-                os.makedirs(dname)
-            json.dump(data, open(fname, 'w'))
+    for name in cfg.get('ranking-files',[]):
+        print(indicator, category, name)
+        var = CubeVariable(indicator, category, name)
+        data = calculate_ranking(var, cube_path, country_names=country_names)
+        fname = ranking_file(indicator, category, name, out_cube_path)
+        dname = os.path.dirname(fname)
+        if not os.path.exists(dname):
+            os.makedirs(dname)
+        json.dump(data, open(fname, 'w'))
 
 
 

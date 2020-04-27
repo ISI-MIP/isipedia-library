@@ -92,14 +92,13 @@ class TemplateContext:
     def template_kwargs(self):
         figure_functions = {name:cls(self) for name, cls in figures_register.items()}
         markdown_commands = {name:functools.partial(func, self) for name, func in commands_register.items()}
-        stype = self.config['study-types'][[s['directory'] for s in self.config['study-types']].index(self.studytype)]
         kwargs = self.variables.copy()
         kwargs.update(figure_functions)
         kwargs.update(markdown_commands)
         kwargs.update(dict(
             country=self.country, 
-            indicator=Indicator(self.indicator, self.config.get('name')),
-            studytype=StudyType(self.studytype, stype.get('name')),
+            indicator=self.indicator,
+            studytype=self.studytype,
             config=self.config,
             ranking=self.ranking,
             ))
@@ -156,21 +155,11 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
         country_names = sorted(os.listdir (os.path.join(cube_folder, indicator, study_type)))
         country_names = [c for c in country_names if os.path.exists(os.path.join(country_data_folder, c))]
 
-    cfg = load_indicator_config(indicator, cube_folder)
-
-    # Select study
-    found = False
-    for stype in cfg['study-types']:
-        if stype['directory'] == study_type:
-            found = True
-            break
-    if not found:
-        raise ValueError('studytype not defined in config.json file: '+repr(study_type))
-
+    cfg = load_indicator_config(indicator)
 
     # load country ranking
     ranking = MultiRanking()
-    for name in stype.get('ranking-files', []):
+    for name in cfg.get('ranking-files', []):
         fname = ranking_file(indicator, study_type, name, cube_folder)
         if not os.path.exists(fname):
             logging.warning('ranking file does not exist: '+fname)
