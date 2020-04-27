@@ -8,35 +8,24 @@ import logging
 
 from isipedia.jsonfile import JsonFile
 
-
-class CubeVariable:
-    """This class corresponds to cube definition of a variable
-    """
-    def __init__(self, indicator, studytype, name):
-        self.indicator = indicator
-        self.studytype = studytype
-        self.name = name
-
-    def jsonfile(self, area, cube_path):
-        return os.path.join(cube_path, self.indicator, self.studytype, area, self.name+'_'+area+'.json')
-
-
-def calculate_ranking(var, cube_path, country_names=None):
+def calculate_ranking(study_path, name, country_names=None):
     """load ranking data"""
+    jsonfile = lambda area: os.path.join(study_path, f'{area.lower()}', name+f'_{area}.json')
+    
     if country_names is None:
-        files = sorted(glob.glob(var.jsonfile('*', cube_path)))
+        files = sorted(glob.glob(jsonfile(area='*')))
         logging.info('found {} matching files'.format(len(files)))
 
-        # check
-        country_dirs = sorted(glob.glob(os.path.join(*os.path.split(var.jsonfile('*', cube_path))[:-1])+'/'))
-        if len(country_dirs) != len(files):
-            logging.warning('found {} country dirs, but {} ranking-variable files'.format(len(country_dirs), len(files)))
-            areas_files = [os.path.basename(os.path.dirname(d)) for d in files]
-            areas_dir = [os.path.basename(d) for d in country_dirs]
-            print('set difference:', set(areas_dir).difference(set(areas_files)))
+        ## check
+        #country_dirs = sorted(glob.glob(os.path.join(*os.path.split(var.jsonfile('*', cube_path))[:-1])+'/'))
+        #if len(country_dirs) != len(files):
+        #    logging.warning('found {} country dirs, but {} ranking-variable files'.format(len(country_dirs), len(files)))
+        #    areas_files = [os.path.basename(os.path.dirname(d)) for d in files]
+        #    areas_dir = [os.path.basename(d) for d in country_dirs]
+        #    print('set difference:', set(areas_dir).difference(set(areas_files)))
 
     else:
-        files = [var.jsonfile(area, cube_path) for area in country_names]
+        files = [jsonfile(area=area) for area in country_names]
 
     n = None
     ref = None
@@ -59,7 +48,7 @@ def calculate_ranking(var, cube_path, country_names=None):
             data[area] = {None: js.getarray()}
     # data['_plot_type'] = js.plot_type
     # data['_filename'] = var.jsonfile('world', cube_path)  # used in ranking map next to world folder...
-    js = JsonFile.load(var.jsonfile('world', cube_path))  # load world-level and copy metadata
+    js = JsonFile.load(jsonfile(area='world'))  # load world-level and copy metadata
     data['_metadata'] = {k:v for k,v in js._js.items() if k != 'data'}
 
     return data
@@ -72,28 +61,20 @@ def load_indicator_config(indicator):
     return yaml.load(open(cfgfile))
 
 
-def ranking_file(indicator, category, variable, cube_path):
+def ranking_file(study_path, variable):
     # return os.path.join(cube_path, indicator, 'ranking.{}.{}.{}.json'.format(indicator, category, variable))
-    return os.path.join(cube_path, indicator, category, 'world', 'ranking', 'ranking.{}.json'.format(variable))
+    return os.path.join(study_path, 'ranking.{}.json'.format(variable))
 
 
-def preprocess_ranking(indicator, cube_path, out_cube_path=None, country_names=None):
-    if out_cube_path is None:
-        out_cube_path = cube_path
-
-    cfg = load_indicator_config(indicator)
-    category = cfg['studytype']
-
+def preprocess_ranking(cfg, study_path, country_names=None):
     for name in cfg.get('ranking-files',[]):
-        print(indicator, category, name)
-        var = CubeVariable(indicator, category, name)
-        data = calculate_ranking(var, cube_path, country_names=country_names)
-        fname = ranking_file(indicator, category, name, out_cube_path)
+        print(study_path, name)
+        data = calculate_ranking(study_path, name, country_names=country_names)
+        fname = ranking_file(study_path, name)
         dname = os.path.dirname(fname)
         if not os.path.exists(dname):
             os.makedirs(dname)
         json.dump(data, open(fname, 'w'))
-
 
 
 def ordinal(num):
@@ -116,16 +97,16 @@ class Ranking:
     def value(self, area, x, scenario=None):
         index = self.data['_index'].index(x)
         if self.plot_type == 'indicator_vs_temperature':
-            return self.data[area]['null'][index]
+            return self.data[area.lower()]['null'][index]
         else:
-            return self.data[area][scenario][index]
+            return self.data[area.lower()][scenario][index]
 
     def values(self, x, scenario=None):
         index = self.data['_index'].index(x)
         if self.plot_type == 'indicator_vs_temperature':
-            values = [self.data[area]['null'][index] for area in self.areas]
+            values = [self.data[area.lower()]['null'][index] for area in self.areas]
         else:
-            values = [self.data[area][scenario][index] for area in self.areas]
+            values = [self.data[area.lower()][scenario][index] for area in self.areas]
         return values
 
     def sorted_areas(self, x, scenario=None):
@@ -136,7 +117,7 @@ class Ranking:
     def number(self, area, x, scenario=None):
         if self.value(area, x, scenario) is None:
             return 'undefined'
-        return self.sorted_areas(x, scenario).index(area) + 1
+        return self.sorted_areas(x, scenario).index(area.lower()) + 1
 
     def position(self, area, x, scenario=None):
         if self.value(area, x, scenario) is None:

@@ -15,8 +15,7 @@ from isipedia.country import Country, countrymasks_folder, country_data_folder
 from isipedia.ranking import load_indicator_config, ranking_file, preprocess_ranking, Ranking
 from isipedia.figure import MapData
 from isipedia.command import contexts_register, commands_register, figures_register
-from isipedia.web import Study, Article
-from process_article import fix_metadata
+from isipedia.web import Study, Article, country_codes as allcountries, fix_metadata
 
 
 class MultiRanking(dict):
@@ -58,16 +57,17 @@ class TemplateContext:
         self.area = area
         self.cube_folder = cube_folder
         self.config = config or load_indicator_config(indicator)
+        self.config['area'] = area
         #self.folder = os.path.join(cube_folder, indicator, studytype, area)
         self.study = Study(**self.config)
-        self.folder = os.path.join(cube_folder, self.study.url, area)
+        self.folder = os.path.join(cube_folder, self.study.url, area.lower())
         if ranking:
             ranking.area = area # predefine area 
         self.ranking = ranking
 
 
     def jsonfile(self, name):
-        return os.path.join(self.cube_folder, self.indicator, self.studytype, self.area, name+'_'+self.area+'.json')
+        return os.path.join(self.cube_folder, self.study.url, self.area.lower(), name+'_'+self.area+'.json')
 
     def _simplifyname(self, fname):
         ' determine variable name from json file name '
@@ -90,11 +90,9 @@ class TemplateContext:
             # raise
             self.country = Country("undefined")
 
-
     @property
     def metadata(self):
         kw = self.config.copy()
-        kw['area'] = area
         fix_metadata(kw)
         return kw
 
@@ -156,20 +154,21 @@ def select_template(indicator, area=None, templatesdir='templates'):
     #     return self[variable].map(x, scenario, title=title or variable, **kwargs)
 
 
-def process_indicator(indicator, cube_folder, country_names=None, study_type='future-projections',
+def process_indicator(indicator, cube_folder, country_names=None, 
     templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None):
   
+    cfg = load_indicator_config(indicator)
+    study_type = cfg['studytype']
+
     # Going though all the countries in the list.
     if country_names is None:
-        country_names = sorted(os.listdir (os.path.join(cube_folder, indicator, study_type)))
-        country_names = [c for c in country_names if os.path.exists(os.path.join(country_data_folder, c))]
-
-    cfg = load_indicator_config(indicator)
+        country_names = allcountries
 
     # load country ranking
     ranking = MultiRanking()
     for name in cfg.get('ranking-files', []):
-        fname = ranking_file(indicator, study_type, name, cube_folder)
+        study_path = os.path.join(cube_folder, Study(area='CHECK', **cfg).url)
+        fname = ranking_file(study_path, name)
         if not os.path.exists(fname):
             logging.warning('ranking file does not exist: '+fname)
             continue
@@ -195,13 +194,14 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
     def process_area(area):
         context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking)
 
+        context.mapdata = mapdata
+        context.makefig = makefig
+
         # add global context
         if makefig:
             context.countrymasksnc = countrymasksnc
             context.countries = countries
             context.countries_simple = countries_simple
-            context.mapdata = mapdata
-            context.makefig = makefig
             context.png = png
 
         # extend markdown context with custom values
@@ -214,6 +214,7 @@ def process_indicator(indicator, cube_folder, country_names=None, study_type='fu
         os.makedirs(context.folder, exist_ok=True)
 
         kwargs = context.template_kwargs()
+        print('template kwargs', kwargs)
 
         text = tmpl.render(**kwargs)
 
@@ -283,24 +284,19 @@ def main():
     for indicator in o.indicators:
 
         if o.ranking:
-            preprocess_ranking(indicator, o.cube_path)
+            cfg = load_indicator_config(indicator)
+            study_path = os.path.join(o.cube_path, Study(area='CHECK', **cfg).url)
+            preprocess_ranking(cfg, study_path)
             if o.no_markdown:
                 pass
 
-        if not o.study_types:
-            study_types = [d for d in os.listdir(os.path.join(o.cube_path, indicator)) if os.path.isdir(os.path.join(o.cube_path, indicator, d))]
-        else:
-            study_types = o.study_types
-
-        for studytype in study_types:
-            print(studytype)
-            try:
-                process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
-                    study_type=studytype, templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig, png=o.png, javascript=o.js)
-            except Exception as error:
-                raise
-                print(error)
-                continue
+        try:
+            process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
+                templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig, png=o.png, javascript=o.js)
+        except Exception as error:
+            raise
+            print(error)
+            continue
 
 
 if __name__ == '__main__':
