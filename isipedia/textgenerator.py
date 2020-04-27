@@ -14,6 +14,7 @@ from isipedia.country import Country, countrymasks_folder, country_data_folder
 from isipedia.ranking import load_indicator_config, ranking_file, preprocess_ranking, Ranking
 from isipedia.figure import MapData
 from isipedia.command import contexts_register, commands_register, figures_register
+from isipedia.web import Study, Article
 
 
 class MultiRanking(dict):
@@ -54,8 +55,10 @@ class TemplateContext:
         self.studytype = studytype
         self.area = area
         self.cube_folder = cube_folder
-        self.folder = os.path.join(cube_folder, indicator, studytype, area)
-        self.config = config or load_indicator_config(indicator, cube_folder)
+        self.config = config or load_indicator_config(indicator)
+        #self.folder = os.path.join(cube_folder, indicator, studytype, area)
+        self.study = Study(**self.config)
+        self.folder = os.path.join(cube_folder, self.study.url, area)
         if ranking:
             ranking.area = area # predefine area 
         self.ranking = ranking
@@ -254,7 +257,7 @@ def main():
     parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
     parser.add_argument('--areas', nargs='*', help='scan all areas by default')
     parser.add_argument('--indicators', nargs='+', required=True, help='')
-    parser.add_argument('--cube-path', default='cube', help='%(default)s')
+    parser.add_argument('--cube-path', default='dist', help='%(default)s')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
     parser.add_argument('--makefig', action='store_true', help='make figures')
     parser.add_argument('--png', action='store_true', help='store interactive figs to png as well (for markdown rendering)')

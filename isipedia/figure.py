@@ -822,7 +822,7 @@ class MapData:
             climate=climate or 'median',
             impact=impact or 'median',
             x='{:.1f}'.format(x) if type(x) is not str else x)
-        return os.path.join(self.cube_path, self.indicator, self.studytype, 'world' ,'maps', name, mapfile)
+        return os.path.join('maps', self.indicator, name, mapfile)
 
 
     def loadcsv(self, name, x, scenario=None, climate=None, impact=None, fill_value=0):
