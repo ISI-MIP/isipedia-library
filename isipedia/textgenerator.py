@@ -214,7 +214,6 @@ def process_indicator(indicator, cube_folder, country_names=None,
         os.makedirs(context.folder, exist_ok=True)
 
         kwargs = context.template_kwargs()
-        print('template kwargs', kwargs)
 
         text = tmpl.render(**kwargs)
 

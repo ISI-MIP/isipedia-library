@@ -88,6 +88,8 @@ class JsonFile:
                 for i in range(len(y)):
                     if y[i] is not None:
                         y[i] = func(y[i])
+        if not inplace:
+            return v
 
 
     def to_array(self, field='y'):
