@@ -167,7 +167,7 @@ def process_indicator(indicator, cube_folder, country_names=None,
     # load country ranking
     ranking = MultiRanking()
     for name in cfg.get('ranking-files', []):
-        study_path = os.path.join(cube_folder, Study(**cfg).url)
+        study_path = os.path.join(cube_folder, Study(area=['whatever'], **cfg).url)
         fname = ranking_file(study_path, name)
         if not os.path.exists(fname):
             logging.warning('ranking file does not exist: '+fname)
