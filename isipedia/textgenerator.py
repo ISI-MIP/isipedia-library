@@ -282,6 +282,7 @@ def main():
     parser.add_argument('--build', action='store_true')
     parser.add_argument('--pdf', action='store_true', help='make pdf version when building')
     parser.add_argument('--deploy', action='store_true')
+    parser.add_argument('--delete', action='store_true')
 
     o = parser.parse_args()
 
@@ -297,12 +298,16 @@ def main():
     print('country_data:', country_data_folder)
 
     all_md_files = []
+    studies = []
 
     for indicator in o.indicators:
 
+        cfg = load_indicator_config(indicator)
+        study = Study(**cfg)
+        studies.append(study)
+
         if o.ranking:
-            cfg = load_indicator_config(indicator)
-            study_path = os.path.join(o.cube_path, Study(**cfg).url)
+            study_path = os.path.join(o.cube_path, study.url)
             preprocess_ranking(cfg, study_path)
             if o.no_markdown:
                 pass
@@ -327,8 +332,17 @@ def main():
 
     if o.deploy:
         from isipedia.web import root
-        subprocess.run(['rsync','-avzr', o.cube_path+'/report/', root / 'dist/report/'])
-        subprocess.run(['rsync','-avzr', o.cube_path+'/pdf/', root / 'dist/pdf/'])
+        for study in studies:
+            cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url)+'/', os.path.join(root, 'dist', study.url)+'/']
+            if o.delete:
+                cmd.apend('--delete')
+            print(' '.join(cmd))
+            subprocess.run(cmd)
+            cmd = ['rsync','-avzr', o.cube_path+'/pdf/', root / 'dist/pdf/']
+            # cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
+            # cmd = ['cp', os.path.join(o.cube_path, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
+            print(' '.join(cmd))
+            subprocess.run(cmd)
 
 
 if __name__ == '__main__':

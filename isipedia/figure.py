@@ -784,7 +784,7 @@ class RankingMap(SuperFig):
     def figcode(self, variable, x, **kwargs):
         kwargs['x'] = x
         kwargs['variable'] = variable   # string
-        return _hashsum(kwargs)
+        return 'rankingmap-'+_hashsum(kwargs)
 
     def caption(self, variable, *args, **kwargs):
         ranking = self.context.ranking[variable.replace('-','_')]
