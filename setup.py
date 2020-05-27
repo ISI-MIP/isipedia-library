@@ -9,7 +9,7 @@ setup(name='Isipedia Library',
       description='utilities to crunch data for ISIpedia',
       url='git@github.com:ISI-MIP/isipedia-library.git',
       packages=['isipedia'],
-      scripts=[],
+      scripts=['scripts/isipedia_build.py'],
       license = "MIT",
       requires = [],
       )
