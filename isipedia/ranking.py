@@ -58,7 +58,7 @@ def load_indicator_config(indicator):
     cfgfile = os.path.join(indicator+'.yml')
     if not os.path.exists(cfgfile):
         logging.warn('no config file present for '+indicator)
-    return yaml.load(open(cfgfile))
+    return yaml.safe_load(open(cfgfile))
 
 
 def ranking_file(study_path, variable):
@@ -68,7 +68,7 @@ def ranking_file(study_path, variable):
 
 def preprocess_ranking(cfg, study_path, country_names=None):
     for name in cfg.get('ranking-files',[]):
-        print(study_path, name)
+        print('ranking preprocessing:',study_path, name)
         data = calculate_ranking(study_path, name, country_names=country_names)
         fname = ranking_file(study_path, name)
         dname = os.path.dirname(fname)

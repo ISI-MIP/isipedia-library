@@ -1,6 +1,7 @@
 """Generate Text for ISIPedia Project
 """
 import json
+import subprocess
 import os
 import glob
 import shutil
@@ -234,11 +235,16 @@ def process_indicator(indicator, cube_folder, country_names=None,
         for jsfile in javascript2:
             shutil.copy(jsfile, context.folder)
 
+        return md_file
+
+
+    md_files = []
 
     for area in country_names:
         print(indicator+ " - " +area)  
         try:
-            process_area(area)
+            md_file = process_area(area)
+            md_files.append(md_file)
         except Exception as error:
             if fail_on_error:
                 raise
@@ -248,6 +254,8 @@ def process_indicator(indicator, cube_folder, country_names=None,
 
     if makefig:
         countrymasksnc.close()
+
+    return md_files
 
 
 def main():
@@ -266,6 +274,9 @@ def main():
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
     parser.add_argument('--js', nargs='+', default=[], help='additional javascript to be copied along in the folder')
+    parser.add_argument('--build', action='store_true')
+    parser.add_argument('--pdf', action='store_true', help='make pdf version when building')
+    parser.add_argument('--deploy', action='store_true')
 
     o = parser.parse_args()
 
@@ -280,6 +291,8 @@ def main():
     country_data_folder = os.path.join(countrymasks_folder, 'country_data')
     print('country_data:', country_data_folder)
 
+    all_md_files = []
+
     for indicator in o.indicators:
 
         if o.ranking:
@@ -290,12 +303,27 @@ def main():
                 pass
 
         try:
-            process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
-                templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig, png=o.png, javascript=o.js)
+            md_files = process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
+                templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig, png=False, javascript=o.js)
+            all_md_files.extend(md_files)
         except Exception as error:
             raise
             print(error)
             continue
+
+    if o.build:
+        from isipedia.web import root
+        import sys
+        cmd = [sys.executable,os.path.join(root, 'scripts', 'process_articles.py'), '--update','--out', o.cube_path, '--html'] + md_files
+        if o.png: cmd += ['--png']
+        if o.pdf: cmd += ['--pdf']
+        print(' '.join(cmd))
+        subprocess.run(cmd)
+
+    if o.deploy:
+        from isipedia.web import root
+        subprocess.run(['rsync','-avzr', o.cube_path+'/report/', root / 'dist/report/'])
+        subprocess.run(['rsync','-avzr', o.cube_path+'/pdf/', root / 'dist/pdf/'])
 
 
 if __name__ == '__main__':
