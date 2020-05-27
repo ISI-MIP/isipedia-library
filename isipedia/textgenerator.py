@@ -338,7 +338,7 @@ def main():
                 cmd.apend('--delete')
             print(' '.join(cmd))
             subprocess.run(cmd)
-            cmd = ['rsync','-avzr', o.cube_path+'/pdf/', root / 'dist/pdf/']
+            cmd = ['rsync','-avzr', o.cube_path+'/pdf/', str(root / 'dist/pdf/')]
             # cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
             # cmd = ['cp', os.path.join(o.cube_path, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
             print(' '.join(cmd))
