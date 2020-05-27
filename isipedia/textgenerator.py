@@ -52,7 +52,7 @@ class Indicator:
 class TemplateContext:
     """template data accessible within jinja2 and provided to various functions such as figures
     """
-    def __init__(self, indicator, studytype, area, cube_folder='cube', config=None, ranking=None):
+    def __init__(self, indicator, studytype, area, cube_folder='dist', config=None, ranking=None):
         self.indicator = indicator
         self.studytype = studytype
         self.area = area
@@ -117,7 +117,7 @@ class TemplateContext:
         return self.variables[name]
 
 
-def load_template_context(indicator, study_type, area, cube_folder='cube', **kwargs):
+def load_template_context(indicator, study_type, area, cube_folder='dist', **kwargs):
     context = TemplateContext(indicator, study_type, area, cube_folder, **kwargs)
     context.load_json_files()
     context.load_country_stats()
@@ -154,6 +154,18 @@ def select_template(indicator, area=None, templatesdir='templates'):
     # def map(self, variable, x=None, scenario=None, title='', **kwargs):
     #     return self[variable].map(x, scenario, title=title or variable, **kwargs)
 
+def load_ranking(indicator, cube_folder='dist'):
+    cfg = load_indicator_config(indicator)
+    ranking = MultiRanking()
+    for name in cfg.get('ranking-files', []):
+        study_path = os.path.join(cube_folder, Study(**cfg).url)
+        fname = ranking_file(study_path, name)
+        if not os.path.exists(fname):
+            logging.warning('ranking file does not exist: '+fname)
+            continue
+        ranking[name.replace('-','_')] = Ranking.load(fname)
+    return ranking
+
 
 def process_indicator(indicator, cube_folder, country_names=None, 
     templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None):
@@ -166,14 +178,7 @@ def process_indicator(indicator, cube_folder, country_names=None,
         country_names = allcountries
 
     # load country ranking
-    ranking = MultiRanking()
-    for name in cfg.get('ranking-files', []):
-        study_path = os.path.join(cube_folder, Study(**cfg).url)
-        fname = ranking_file(study_path, name)
-        if not os.path.exists(fname):
-            logging.warning('ranking file does not exist: '+fname)
-            continue
-        ranking[name.replace('-','_')] = Ranking.load(fname)
+    ranking = load_ranking(indicator, cube_folder)
 
     # used by the figures
     if makefig:

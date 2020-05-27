@@ -699,6 +699,30 @@ def _rankingmap_mpl(countrymasksnc, ranking, x, scenario=None, method='number', 
     return fig
 
 
+def get_ranking_data(countries, ranking, x, scenario=None, method='number'):
+    import pandas as pd
+
+    if method not in ['number', 'value']:
+        raise ValueError('method must be "number" or "value"')
+
+    ranking_method = getattr(ranking, method)
+    ranking_data = []
+    for c in countries:
+        area = c['properties']['ISIPEDIA']
+        name = c['properties']['NAME']
+        # print(area)
+        if area.lower() not in ranking.areas:
+            logging.warning('missing area for ranking: '+area)
+            continue
+        value = ranking.value(area.lower(), x, scenario)
+        if value is not None:
+            value = round(value, 2)
+        rank = ranking.number(area.lower(), x, scenario)
+        ranking_data.append((area, name, value, rank, ranking.plot_label_y, ranking.plot_unit_y))
+
+    return pd.DataFrame(ranking_data, columns=["Code", "Country", "Value", "Rank", 'label', 'unit'])
+
+
 def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', title='', label=''):
     # Adapted from https://altair-viz.github.io/gallery/index.html
 
@@ -717,28 +741,13 @@ def _rankingmap_altair(countries, ranking, x, scenario=None, method='number', ti
     default_title = getattr(ranking, 'plot_label_y','') + '\n' + details
     # default_label = 'ranking number' if method == 'number' else ('ranking value ({})'.format(getattr(ranking, 'plot_unit_y')))    
 
-    ranking_method = getattr(ranking, method)
-    ranking_data = []
-    for c in countries:
-        area = c['properties']['ISIPEDIA'].lower()
-        name = c['properties']['NAME']
-        # print(area)
-        if area not in ranking.areas:
-            logging.warning('missing area for ranking: '+area)
-            continue
-        value = ranking.value(area, x, scenario)
-        if value is not None:
-            value = round(value, 2)
-        rank = ranking.number(area, x, scenario)
-        ranking_data.append((area, name, value, rank, ranking.plot_label_y, ranking.plot_unit_y))
-
-    ranking_data = pd.DataFrame(ranking_data, columns=["Code", "Country", "Value", "Rank", 'label', 'unit'])
+    ranking_data = get_ranking_data(countries, ranking, x, scenario, method)
 
     chart = alt.Chart(source).mark_geoshape().encode(
         # color="Rank:Q",
         color=alt.Color("Rank:Q", sort='ascending') if method == 'number'  else alt.Color("Value:Q", sort='descending'),
         # tooltip=["Country:N", "Code:N", "Value:Q", "Rank:Q"]
-        tooltip=["label:N", "unit:N", "Country:N", "code:N", "Value:Q", "Rank:Q"]
+        tooltip=["label:N", "unit:N", "Country:N", "Code:N", "Value:Q", "Rank:Q"]
     ).transform_lookup(
         lookup='properties.ISIPEDIA',
         from_=alt.LookupData(ranking_data, 'Code', ranking_data.columns.tolist())
