@@ -281,8 +281,11 @@ def main():
     parser.add_argument('--js', nargs='+', default=[], help='additional javascript to be copied along in the folder')
     parser.add_argument('--build', action='store_true')
     parser.add_argument('--pdf', action='store_true', help='make pdf version when building')
-    parser.add_argument('--deploy', action='store_true')
+    parser.add_argument('--deploy', action='store_true', help='deploy to local isipedia.org')
+    parser.add_argument('--deploy-test', action='store_true')
     parser.add_argument('--delete', action='store_true')
+    # parser.add_argument('--deploy-demo', action='store_true')
+    # parser.add_argument('--deploy-isipedia', action='store_true')
 
     o = parser.parse_args()
 
@@ -330,19 +333,36 @@ def main():
         print(' '.join(cmd))
         subprocess.run(cmd)
 
-    if o.deploy:
-        from isipedia.web import root
+
+    def deploy(root):
         for study in studies:
-            cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url)+'/', os.path.join(root, 'dist', study.url)+'/']
+            cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url)+'/', f'{root}/{study.url}/']
             if o.delete:
                 cmd.apend('--delete')
             print(' '.join(cmd))
             subprocess.run(cmd)
-            cmd = ['rsync','-avzr', o.cube_path+'/pdf/', str(root / 'dist/pdf/')]
-            # cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
-            # cmd = ['cp', os.path.join(o.cube_path, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
-            print(' '.join(cmd))
-            subprocess.run(cmd)
+
+        # cmd = ['rsync','-avzr', o.cube_path+'/pdf/', f'{root}/pdf/']
+        # # cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
+        # # cmd = ['cp', os.path.join(o.cube_path, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
+        # print(' '.join(cmd))
+        # subprocess.run(cmd)
+
+
+    if o.deploy:
+        from isipedia.web import root
+        deploy(root / 'dist')
+
+
+    if o.deploy_test:
+        import socket
+        host = socket.gethostname()
+        if host.startswith('login'):
+            server = 'se59:'
+        else:
+            server = 'isipedia.org:'
+        remote = server+'/webservice/test.isipedia.org'
+        deploy(remote)
 
 
 if __name__ == '__main__':
