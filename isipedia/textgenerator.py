@@ -199,12 +199,11 @@ def process_indicator(indicator, cube_folder, country_names=None,
 
     def process_area(area):
         context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking)
-
-        context.mapdata = mapdata
         context.makefig = makefig
 
         # add global context
         if makefig:
+            context.mapdata = mapdata
             context.countrymasksnc = countrymasksnc
             context.countries = countries
             context.countries_simple = countries_simple
