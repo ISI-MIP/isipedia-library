@@ -304,6 +304,9 @@ def main():
 
     for indicator in o.indicators:
 
+        if indicator.endswith('.yml'):
+            indicator, _ = os.path.splitext(indicator)
+
         cfg = load_indicator_config(indicator)
         study = Study(**cfg)
         studies.append(study)
