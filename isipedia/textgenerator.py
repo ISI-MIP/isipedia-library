@@ -325,7 +325,7 @@ def main():
         study = Study(**cfg)
         studies.append(study)
 
-        if not o.areas:
+        if not o.areas and study.area:
             o.areas = study.area
 
         if o.makefig is None:
