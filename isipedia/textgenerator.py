@@ -290,7 +290,6 @@ def main():
     print('country_data:', country_data_folder)
 
     all_md_files = []
-    studies = []
 
     for indicator in o.indicators:
 
@@ -304,7 +303,6 @@ def main():
             continue
 
         study = Study(**cfg)
-        studies.append(study)
 
         if not o.areas:
             if study.area:
@@ -340,45 +338,44 @@ def main():
             md_files = [TemplateContext(indicator, cfg['studytype'], config=cfg, area=area, cube_folder=o.output).markdown for area in o.areas]
 
 
-    if o.build:
-        from isipedia.web import root
-        import sys
-        cmd = [sys.executable,os.path.join(root, 'scripts', 'process_articles.py'), '--update','--out', o.output, '--html'] + md_files
-        if o.png: cmd += ['--png']
-        if o.pdf: cmd += ['--pdf']
-        print(' '.join(cmd))
-        subprocess.run(cmd)
+        if o.build:
+            from isipedia.web import root
+            import sys
+            cmd = [sys.executable,os.path.join(root, 'scripts', 'process_articles.py'), '--update','--out', o.output, '--html'] + md_files
+            if o.png: cmd += ['--png']
+            if o.pdf: cmd += ['--pdf']
+            print(' '.join(cmd))
+            subprocess.run(cmd)
 
 
-    def deploy(root):
-        for study in studies:
+        def deploy(root):
             cmd = ['rsync','-avzr', os.path.join(o.output, study.url)+'/', f'{root}/{study.url}/']
             if o.delete_rsync:
                 cmd.apend('--delete')
             print(' '.join(cmd))
             subprocess.run(cmd)
 
-        # cmd = ['rsync','-avzr', o.output+'/pdf/', f'{root}/pdf/']
-        # # cmd = ['rsync','-avzr', os.path.join(o.output, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
-        # # cmd = ['cp', os.path.join(o.output, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
-        # print(' '.join(cmd))
-        # subprocess.run(cmd)
+            # cmd = ['rsync','-avzr', o.output+'/pdf/', f'{root}/pdf/']
+            # # cmd = ['rsync','-avzr', os.path.join(o.output, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
+            # # cmd = ['cp', os.path.join(o.output, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
+            # print(' '.join(cmd))
+            # subprocess.run(cmd)
 
 
-    if o.deploy:
-        from isipedia.web import root
-        deploy(root / 'dist')
+        if o.deploy:
+            from isipedia.web import root
+            deploy(root / 'dist')
 
 
-    if o.deploy_test:
-        import socket
-        host = socket.gethostname()
-        if host.startswith('login'):
-            server = 'se59:'
-        else:
-            server = 'isipedia.org:'
-        remote = server+'/webservice/test.isipedia.org'
-        deploy(remote)
+        if o.deploy_test:
+            import socket
+            host = socket.gethostname()
+            if host.startswith('login'):
+                server = 'se59:'
+            else:
+                server = 'isipedia.org:'
+            remote = server+'/webservice/test.isipedia.org'
+            deploy(remote)
 
 
 if __name__ == '__main__':
