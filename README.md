@@ -1,6 +1,12 @@
 # isipedia-library
-pip installable library "isipedia"
 
+install:
+    python setup.py install
+
+usage:
+    isipedia_build.py drought.yml
+
+To be executed from a study directory (see isipedia-studies repo)
 
 ## Dependencies:
 

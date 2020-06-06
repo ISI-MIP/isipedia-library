@@ -267,9 +267,9 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('indicators', nargs='*', help='one or several yaml configuration files (default to all yaml present in current directory)')
     parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
     parser.add_argument('--areas', nargs='*', help='by default: use area field from yaml config')
-    parser.add_argument('--indicators', nargs='+', help='one or several yaml configuration files (default to all yaml present in current directory')
     parser.add_argument('--cube-path', default='dist', help='%(default)s')
     parser.add_argument('--ranking', action='store_true', default=None, help='preprocess ranking')
     parser.add_argument('--no-ranking', action='store_false', dest='ranking', default=None, help='do not preprocess ranking')
@@ -292,7 +292,7 @@ def main():
 
     # make sure that indicators are loaded from the same directory
     if o.indicators and len(set(os.path.dirname(i) for i in o.indicators)) > 1:
-        parser.error('--indicators must all be in one directory')
+        parser.error('indicators must all be in one directory')
 
     # just pick all yaml files present in current directory if no indicator is provided
     if not o.indicators:
