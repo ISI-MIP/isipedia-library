@@ -52,7 +52,7 @@ class Indicator:
 class TemplateContext:
     """template data accessible within jinja2 and provided to various functions such as figures
     """
-    def __init__(self, indicator, studytype, area, cube_folder='dist', config=None, ranking=None):
+    def __init__(self, indicator, studytype, area, cube_folder='dist', config=None, ranking=None, makefig=True, variables=None, png=False):
         self.indicator = indicator
         self.studytype = studytype
         self.area = area
@@ -65,7 +65,9 @@ class TemplateContext:
         if ranking:
             ranking.area = area # predefine area 
         self.ranking = ranking
-
+        self.makefig = makefig
+        self.png = png
+        self.variables = variables or {}
 
     def jsonfile(self, name):
         return os.path.join(self.cube_folder, self.study.url, self.area.lower(), name+'_'+self.area+'.json')
@@ -198,8 +200,7 @@ def process_indicator(indicator, cube_folder, country_names=None,
 
 
     def process_area(area):
-        context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking)
-        context.makefig = makefig
+        context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking, makefig=makefig, png=png)
 
         # add global context
         if makefig:
@@ -207,7 +208,6 @@ def process_indicator(indicator, cube_folder, country_names=None,
             context.countrymasksnc = countrymasksnc
             context.countries = countries
             context.countries_simple = countries_simple
-            context.png = png
 
         # extend markdown context with custom values
         for f in contexts_register:
