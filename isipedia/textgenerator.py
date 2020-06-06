@@ -271,7 +271,8 @@ def main():
     parser.add_argument('--areas', nargs='*', help='by default: use area field from yaml config')
     parser.add_argument('--indicators', nargs='+', help='one or several yaml configuration files (default to all yaml present in current directory')
     parser.add_argument('--cube-path', default='dist', help='%(default)s')
-    parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
+    parser.add_argument('--ranking', action='store_true', default=None, help='preprocess ranking')
+    parser.add_argument('--no-ranking', action='store_false', dest='ranking', default=None, help='do not preprocess ranking')
     parser.add_argument('--makefig', action='store_true', default=None, help='make figures')
     parser.add_argument('--no-figure', action='store_false', default=None, dest='makefig', help='do not make figures (if enabled by default)')
     parser.add_argument('--png', action='store_true', help='store interactive figs to png as well (for markdown rendering)')
@@ -332,9 +333,11 @@ def main():
         else:
             makefig = o.makefig
 
-        print('#### process', indicator, {'makefig':makefig, 'ranking': o.ranking, 'dest':o.cube_path, 'templates':o.templates_dir}, o.areas)
+        ranking = o.ranking and 'ranking-files' in cfg
 
-        if o.ranking:
+        print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'dest':o.cube_path, 'templates':o.templates_dir}, o.areas)
+
+        if ranking:
             study_path = os.path.join(o.cube_path, study.url)
             preprocess_ranking(cfg, study_path)
             if o.no_markdown:
