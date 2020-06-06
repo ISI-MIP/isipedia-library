@@ -6,7 +6,10 @@ import logging
 
 import pandas as pd
 import altair as alt
+import matplotlib as mpl
+import matplotlib.font_manager as font_manager
 
+from isipedia.web import isipedia_org
 from isipedia.country import country_data_folder, countrymasks_folder
 from isipedia.command import figures_register, isipediafigure
 
@@ -141,6 +144,7 @@ def _maybe_createdir(path):
     return path
 
 
+
 def isipedia_theme():
     font = "IBM Plex Sans"
 
@@ -192,6 +196,31 @@ def isipedia_theme():
 alt.themes.register('isipedia_theme', isipedia_theme)
 alt.themes.enable('isipedia_theme')
 
+
+# matplotlib fonts
+font_dirs = [os.path.join(isipedia_org, 'assets', 'fonts')]
+font_files = font_manager.findSystemFonts(fontpaths=font_dirs)
+font_list = font_manager.createFontList(font_files)
+font_manager.fontManager.ttflist.extend(font_list)
+
+mpl.rcParams['font.family'] = 'IBM Plex Sans'
+
+
+my_dpi = 96
+
+mpl.rcParams['axes.titlesize'] = 18
+mpl.rcParams['axes.labelsize'] = 16
+# mpl.rcParams['axes.labelweight'] = "bold"
+# mpl.rcParams['lines.linewidth'] : 3
+# mpl.rcParams['lines.markersize'] : 10
+mpl.rcParams['xtick.labelsize'] = 14
+# mpl.rcParams['xtick.labelweight'] = "bold"
+# mpl.rcParams['ytick.labelweight'] = "bold"
+mpl.rcParams['ytick.labelsize'] = 14
+mpl.rcParams['figure.titlesize'] = 20
+mpl.rcParams['figure.dpi'] = my_dpi
+scale = 2
+mpl.rcParams['figure.figsize'] = 600/my_dpi*scale, 300/my_dpi*scale
 
 
 def get_ranking_data(countries, ranking, x, scenario=None, method='number'):

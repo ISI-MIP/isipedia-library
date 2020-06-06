@@ -8,8 +8,11 @@ for test in ['isipedia.org', '../isipedia.org', '../../isipedia.org', '../../../
         sys.path.append(webscript)
         print(webscript, 'appended to python path')
         found = True
+        isipedia_org = test
         break
-if not found: logging.warning('isipedia.org was not found')
+if not found: 
+    isipedia_org = None
+    logging.warning('isipedia.org was not found')
 
 try:
     from process_articles import *
