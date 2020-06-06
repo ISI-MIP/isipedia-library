@@ -329,7 +329,7 @@ def main():
             o.areas = study.area
 
         if o.makefig is None:
-            makefig = cfg.get('makefig')
+            makefig = cfg.get('makefig', True)
         else:
             makefig = o.makefig
 
