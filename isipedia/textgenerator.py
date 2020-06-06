@@ -268,12 +268,9 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('indicators', nargs='*', help='one or several yaml configuration files (default to all yaml present in current directory)')
-    parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
     parser.add_argument('--areas', nargs='*', help='by default: use area field from yaml config')
-    parser.add_argument('--cube-path', default='dist', help='%(default)s')
-    parser.add_argument('--ranking', action='store_true', default=None, help='preprocess ranking')
+    parser.add_argument('-o', '--output', default='dist', help='%(default)s')
     parser.add_argument('--no-ranking', action='store_false', dest='ranking', default=None, help='do not preprocess ranking')
-    parser.add_argument('--makefig', action='store_true', default=None, help='make figures')
     parser.add_argument('--no-figure', action='store_false', default=None, dest='makefig', help='do not make figures (if enabled by default)')
     parser.add_argument('--png', action='store_true', help='store interactive figs to png as well (for markdown rendering)')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
@@ -284,7 +281,7 @@ def main():
     parser.add_argument('--pdf', action='store_true', help='make pdf version when building')
     parser.add_argument('--deploy', action='store_true', help='deploy to local isipedia.org')
     parser.add_argument('--deploy-test', action='store_true')
-    parser.add_argument('--delete', action='store_true')
+    parser.add_argument('--delete-rsync', action='store_true')
     # parser.add_argument('--deploy-demo', action='store_true')
     # parser.add_argument('--deploy-isipedia', action='store_true')
 
@@ -335,16 +332,16 @@ def main():
 
         ranking = o.ranking and 'ranking-files' in cfg
 
-        print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'dest':o.cube_path, 'templates':o.templates_dir}, o.areas)
+        print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'output':o.output, 'templates':o.templates_dir}, o.areas)
 
         if ranking:
-            study_path = os.path.join(o.cube_path, study.url)
+            study_path = os.path.join(o.output, study.url)
             preprocess_ranking(cfg, study_path)
             if o.no_markdown:
                 pass
 
         try:
-            md_files = process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
+            md_files = process_indicator(indicator, o.output+'/', country_names=o.areas, 
                 templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js)
             all_md_files.extend(md_files)
         except Exception as error:
@@ -355,7 +352,7 @@ def main():
     if o.build:
         from isipedia.web import root
         import sys
-        cmd = [sys.executable,os.path.join(root, 'scripts', 'process_articles.py'), '--update','--out', o.cube_path, '--html'] + md_files
+        cmd = [sys.executable,os.path.join(root, 'scripts', 'process_articles.py'), '--update','--out', o.output, '--html'] + md_files
         if o.png: cmd += ['--png']
         if o.pdf: cmd += ['--pdf']
         print(' '.join(cmd))
@@ -364,15 +361,15 @@ def main():
 
     def deploy(root):
         for study in studies:
-            cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url)+'/', f'{root}/{study.url}/']
-            if o.delete:
+            cmd = ['rsync','-avzr', os.path.join(o.output, study.url)+'/', f'{root}/{study.url}/']
+            if o.delete_rsync:
                 cmd.apend('--delete')
             print(' '.join(cmd))
             subprocess.run(cmd)
 
-        # cmd = ['rsync','-avzr', o.cube_path+'/pdf/', f'{root}/pdf/']
-        # # cmd = ['rsync','-avzr', os.path.join(o.cube_path, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
-        # # cmd = ['cp', os.path.join(o.cube_path, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
+        # cmd = ['rsync','-avzr', o.output+'/pdf/', f'{root}/pdf/']
+        # # cmd = ['rsync','-avzr', os.path.join(o.output, study.url_pdf), os.path.join(root, 'dist', study.url_pdf)]
+        # # cmd = ['cp', os.path.join(o.output, study.url).replace('report', 'pdf')+'*', os.path.join(root, 'dist', 'pdf')]
         # print(' '.join(cmd))
         # subprocess.run(cmd)
 
