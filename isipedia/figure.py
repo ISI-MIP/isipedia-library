@@ -148,6 +148,13 @@ def isipedia_theme():
         "config" : {
             "background": '#F1F4F4',
             "padding": 0,
+            "view": {
+                "continuousWidth": 600, # this has no effect with autosize fit-x
+                "continuousHeight": 300, 
+                "strokeOpacity": 0, # do not show axis frame
+                },
+            "autosize": {"contains": "padding", "type": "fit-x"}, # this cancels continuousWidth
+
             "title": {
                 "font": font,
                 "fontsize": 16,
