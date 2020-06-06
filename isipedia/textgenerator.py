@@ -268,7 +268,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
-    parser.add_argument('--areas', nargs='*', help='scan all areas by default')
+    parser.add_argument('--areas', nargs='*', help='by default: use area field from yaml config')
     parser.add_argument('--indicators', nargs='+', required=True, help='')
     parser.add_argument('--cube-path', default='dist', help='%(default)s')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
@@ -293,6 +293,7 @@ def main():
         try:
             import custom
         except ImportError as error:
+            raise
             logging.warning('failed to load custom.py module')
             logging.warning(str(error))
 
@@ -310,6 +311,9 @@ def main():
         cfg = load_indicator_config(indicator)
         study = Study(**cfg)
         studies.append(study)
+
+        if not o.areas:
+            o.areas = study.area
 
         if o.ranking:
             study_path = os.path.join(o.cube_path, study.url)
