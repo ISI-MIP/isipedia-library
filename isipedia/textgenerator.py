@@ -14,7 +14,6 @@ import frontmatter
 from isipedia.jsonfile import JsonFile
 from isipedia.country import Country, countrymasks_folder, country_data_folder
 from isipedia.ranking import load_indicator_config, ranking_file, preprocess_ranking, Ranking
-from isipedia.figure import MapData
 from isipedia.command import contexts_register, commands_register, figures_register
 from isipedia.web import Study, Article, country_codes as allcountries, fix_metadata
 
@@ -48,6 +47,7 @@ class Indicator:
     def __init__(self, code, name):
         self.code = code
         self.name = name
+
 
 
 class TemplateContext:
@@ -190,32 +190,8 @@ def process_indicator(indicator, cube_folder, country_names=None,
     # load country ranking
     ranking = load_ranking(indicator, cube_folder)
 
-    # used by the figures
-    if makefig:
-        countrymasksnc = nc.Dataset(os.path.join(countrymasks_folder, 'countrymasks.nc'))
-        countries = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
-        countries_simple = json.load(open(countrymasks_folder+'/countrymasks.geojson'))['features']
-        import shapely.geometry as shg
-        import shapely.ops
-        logging.info('simplify countries geometry for ranking map')
-        for c in countries_simple:
-            # simplify for faster rendering
-            simple = shg.shape(c['geometry']).simplify(0.1) 
-            simple2 = shapely.ops.transform(lambda x, y: (round(x, 2), round(y, 2)), simple)
-            c['geometry'] = shg.mapping(simple2)
-
-        mapdata = MapData(indicator, study_type, cube_folder)
-
-
     def process_area(area):
         context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking, makefig=makefig, png=png)
-
-        # add global context
-        if makefig:
-            context.mapdata = mapdata
-            context.countrymasksnc = countrymasksnc
-            context.countries = countries
-            context.countries_simple = countries_simple
 
         # extend markdown context with custom values
         for f in contexts_register:
@@ -260,9 +236,6 @@ def process_indicator(indicator, cube_folder, country_names=None,
             else:
                 logging.warning(str(error))
                 print('!! failed',area)
-
-    if makefig:
-        countrymasksnc.close()
 
     return md_files
 
@@ -349,7 +322,7 @@ def main():
         print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'output':o.output, 'templates':o.templates_dir}, o.areas)
 
         if o.markdown:
-            
+
             if ranking:
                 study_path = os.path.join(o.output, study.url)
                 preprocess_ranking(cfg, study_path)
