@@ -18,6 +18,7 @@ from isipedia.figure import MapData
 from isipedia.command import contexts_register, commands_register, figures_register
 from isipedia.web import Study, Article, country_codes as allcountries, fix_metadata
 
+allcountries = sorted(allcountries)
 
 class MultiRanking(dict):
     def __init__(self, ranking=None, area=None):
@@ -54,10 +55,10 @@ class TemplateContext:
     """
     def __init__(self, indicator, studytype, area, cube_folder='dist', config=None, ranking=None, makefig=True, variables=None, png=False):
         self.indicator = indicator
+        self.config = config or load_indicator_config(indicator)
         self.studytype = studytype
         self.area = area
         self.cube_folder = cube_folder
-        self.config = config or load_indicator_config(indicator)
         self.config['area'] = area
         #self.folder = os.path.join(cube_folder, indicator, studytype, area)
         self.study = Study(**self.config)
@@ -71,6 +72,11 @@ class TemplateContext:
 
     def jsonfile(self, name):
         return os.path.join(self.cube_folder, self.study.url, self.area.lower(), name+'_'+self.area+'.json')
+
+    @property
+    def markdown(self):
+        return os.path.join(self.folder, '.{indicator}_{area}.md'.format(**vars(self)))
+
 
     def _simplifyname(self, fname):
         ' determine variable name from json file name '
@@ -111,6 +117,7 @@ class TemplateContext:
             studytype=self.studytype,
             config=self.config,
             ranking=self.ranking,
+            markdown=self.markdown,
             ))
         return kwargs
 
@@ -119,10 +126,11 @@ class TemplateContext:
         return self.variables[name]
 
 
-def load_template_context(indicator, study_type, area, cube_folder='dist', **kwargs):
+def load_template_context(indicator, study_type, area, cube_folder='dist', load_files=True, **kwargs):
     context = TemplateContext(indicator, study_type, area, cube_folder, **kwargs)
-    context.load_json_files()
-    context.load_country_stats()
+    if load_files:
+        context.load_json_files()
+        context.load_country_stats()
     return context
 
 
@@ -222,14 +230,11 @@ def process_indicator(indicator, cube_folder, country_names=None,
 
         text = tmpl.render(**kwargs)
 
-        md_file = os.path.join(context.folder, '.{indicator}_{area}.md'.format(indicator=indicator, area=area))
+        md_file = context.markdown
 
         post = frontmatter.Post(text, **context.metadata)
         frontmatter.dump(post, md_file)
-        #with open(md_file, 'w') as f:
-        #    f.write(text)
 
-        # copy along javascript?
         javascript2 = javascript or []
 
         base, ext = os.path.splitext(tmplfile)
@@ -272,18 +277,24 @@ def main():
     parser.add_argument('-o', '--output', default='dist', help='%(default)s')
     parser.add_argument('--no-ranking', action='store_false', dest='ranking', default=None, help='do not preprocess ranking')
     parser.add_argument('--no-figure', action='store_false', default=None, dest='makefig', help='do not make figures (if enabled by default)')
+    parser.add_argument('--no-markdown', action='store_false', dest='markdown', help='straight to the build')
+
     parser.add_argument('--png', action='store_true', help='store interactive figs to png as well (for markdown rendering)')
-    parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
+    parser.add_argument('--build', '--html', action='store_true', help='build as HTML')
+    parser.add_argument('--pdf', action='store_true', help='make pdf version when building')
+
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
     parser.add_argument('--js', nargs='+', default=[], help='additional javascript to be copied along in the folder')
-    parser.add_argument('--build', action='store_true')
-    parser.add_argument('--pdf', action='store_true', help='make pdf version when building')
     parser.add_argument('--deploy', action='store_true', help='deploy to local isipedia.org')
     parser.add_argument('--deploy-test', action='store_true')
     parser.add_argument('--delete-rsync', action='store_true')
     # parser.add_argument('--deploy-demo', action='store_true')
     # parser.add_argument('--deploy-isipedia', action='store_true')
+
+    # deprecated arguments, kept for back-compatibility
+    parser.add_argument('--ranking', action='store_true', default=None, help=argparse.SUPPRESS)
+    parser.add_argument('--makefig', action='store_true', default=None, help=argparse.SUPPRESS)
 
     o = parser.parse_args()
 
@@ -322,8 +333,11 @@ def main():
         study = Study(**cfg)
         studies.append(study)
 
-        if not o.areas and study.area:
-            o.areas = study.area
+        if not o.areas:
+            if study.area:
+                o.areas = study.area
+            else:
+                o.areas = allcountries
 
         if o.makefig is None:
             makefig = cfg.get('makefig', True)
@@ -334,20 +348,24 @@ def main():
 
         print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'output':o.output, 'templates':o.templates_dir}, o.areas)
 
-        if ranking:
-            study_path = os.path.join(o.output, study.url)
-            preprocess_ranking(cfg, study_path)
-            if o.no_markdown:
-                pass
+        if o.markdown:
+            
+            if ranking:
+                study_path = os.path.join(o.output, study.url)
+                preprocess_ranking(cfg, study_path)
 
-        try:
-            md_files = process_indicator(indicator, o.output+'/', country_names=o.areas, 
-                templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js)
-            all_md_files.extend(md_files)
-        except Exception as error:
-            raise
-            print(error)
-            continue
+            try:
+                md_files = process_indicator(indicator, o.output+'/', country_names=o.areas, 
+                    templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js)
+                all_md_files.extend(md_files)
+            except Exception as error:
+                raise
+                print(error)
+                continue
+
+        else:
+            md_files = [TemplateContext(indicator, cfg['studytype'], config=cfg, area=area, cube_folder=o.output).markdown for area in o.areas]
+
 
     if o.build:
         from isipedia.web import root
