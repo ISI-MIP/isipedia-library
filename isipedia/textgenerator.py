@@ -269,7 +269,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--study-types', nargs='*', help='scan all study types by default')
     parser.add_argument('--areas', nargs='*', help='by default: use area field from yaml config')
-    parser.add_argument('--indicators', nargs='+', required=True, help='')
+    parser.add_argument('--indicators', nargs='+', help='one or several yaml configuration files (default to all yaml present in current directory')
     parser.add_argument('--cube-path', default='dist', help='%(default)s')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
     parser.add_argument('--makefig', action='store_true', default=None, help='make figures')
@@ -289,14 +289,20 @@ def main():
 
     o = parser.parse_args()
 
+    # make sure that indicators are loaded from the same directory
+    if o.indicators and len(set(os.path.dirname(i) for i in o.indicators)) > 1:
+        parser.error('--indicators must all be in one directory')
+
+    # just pick all yaml files present in current directory if no indicator is provided
+    if not o.indicators:
+        o.indicators = [f for f in os.listdir() if f.endswith('.yml')]
+
     if os.path.exists('custom.py'):
         print('custom.py module present in work directory. Load it.')
         try:
             import custom
         except ImportError as error:
             raise
-            logging.warning('failed to load custom.py module')
-            logging.warning(str(error))
 
     country_data_folder = os.path.join(countrymasks_folder, 'country_data')
     print('country_data:', country_data_folder)
@@ -309,7 +315,12 @@ def main():
         if indicator.endswith('.yml'):
             indicator, _ = os.path.splitext(indicator)
 
-        cfg = load_indicator_config(indicator)
+        try:
+            cfg = load_indicator_config(indicator)
+        except:
+            logging.warning(f'failed to load: {indicator}.yml')
+            continue
+
         study = Study(**cfg)
         studies.append(study)
 
@@ -320,7 +331,8 @@ def main():
             makefig = cfg.get('makefig')
         else:
             makefig = o.makefig
-        print(indicator, makefig, o.areas)
+
+        print('#### process', indicator, {'makefig':makefig, 'ranking': o.ranking, 'dest':o.cube_path, 'templates':o.templates_dir}, o.areas)
 
         if o.ranking:
             study_path = os.path.join(o.cube_path, study.url)
