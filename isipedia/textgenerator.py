@@ -272,7 +272,8 @@ def main():
     parser.add_argument('--indicators', nargs='+', required=True, help='')
     parser.add_argument('--cube-path', default='dist', help='%(default)s')
     parser.add_argument('--ranking', action='store_true', help='preprocess ranking')
-    parser.add_argument('--makefig', action='store_true', help='make figures')
+    parser.add_argument('--makefig', action='store_true', default=None, help='make figures')
+    parser.add_argument('--no-figure', action='store_false', default=None, dest='makefig', help='do not make figures (if enabled by default)')
     parser.add_argument('--png', action='store_true', help='store interactive figs to png as well (for markdown rendering)')
     parser.add_argument('--no-markdown', action='store_true', help='stop after preprocessing')
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
@@ -315,6 +316,12 @@ def main():
         if not o.areas:
             o.areas = study.area
 
+        if o.makefig is None:
+            makefig = cfg.get('makefig')
+        else:
+            makefig = o.makefig
+        print(indicator, makefig, o.areas)
+
         if o.ranking:
             study_path = os.path.join(o.cube_path, study.url)
             preprocess_ranking(cfg, study_path)
@@ -323,7 +330,7 @@ def main():
 
         try:
             md_files = process_indicator(indicator, o.cube_path+'/', country_names=o.areas, 
-                templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=o.makefig, png=False, javascript=o.js)
+                templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js)
             all_md_files.extend(md_files)
         except Exception as error:
             raise
