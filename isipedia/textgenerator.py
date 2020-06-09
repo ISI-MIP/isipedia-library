@@ -245,6 +245,9 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--makefig', action='store_true', default=None, help=argparse.SUPPRESS)
+    parser.add_argument('--ranking', action='store_true', default=None, help=argparse.SUPPRESS)
+    
     parser.add_argument('indicators', nargs='*', help='one or several yaml configuration files (default to all yaml present in current directory)')
     parser.add_argument('--areas', nargs='*', help='by default: use area field from yaml config')
     parser.add_argument('-o', '--output', default='dist', help='%(default)s')
@@ -266,8 +269,6 @@ def main():
     # parser.add_argument('--deploy-isipedia', action='store_true')
 
     # deprecated arguments, kept for back-compatibility
-    parser.add_argument('--ranking', action='store_true', default=None, help=argparse.SUPPRESS)
-    parser.add_argument('--makefig', action='store_true', default=None, help=argparse.SUPPRESS)
 
     o = parser.parse_args()
 
