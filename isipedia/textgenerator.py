@@ -53,7 +53,7 @@ class Indicator:
 class TemplateContext:
     """template data accessible within jinja2 and provided to various functions such as figures
     """
-    def __init__(self, indicator, studytype, area, cube_folder='dist', config=None, ranking=None, makefig=True, variables=None, png=False):
+    def __init__(self, indicator, studytype, area, cube_folder='dist', config=None, ranking=None, makefig=True, variables=None, png=False, dev=False):
         self.indicator = indicator
         self.config = config or load_indicator_config(indicator)
         self.studytype = studytype
@@ -68,6 +68,7 @@ class TemplateContext:
         self.ranking = ranking
         self.makefig = makefig
         self.png = png
+        self.dev = dev
         self.variables = variables or {}
 
     def jsonfile(self, name):
@@ -178,7 +179,7 @@ def load_ranking(indicator, cube_folder='dist'):
 
 
 def process_indicator(indicator, cube_folder, country_names=None, 
-    templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None):
+    templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None, dev=False):
   
     cfg = load_indicator_config(indicator)
     study_type = cfg['studytype']
@@ -191,7 +192,7 @@ def process_indicator(indicator, cube_folder, country_names=None,
     ranking = load_ranking(indicator, cube_folder)
 
     def process_area(area):
-        context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking, makefig=makefig, png=png)
+        context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking, makefig=makefig, png=png, dev=dev)
 
         # extend markdown context with custom values
         for f in contexts_register:
@@ -266,6 +267,7 @@ def main():
     parser.add_argument('--deploy', action='store_true', help='deploy to local isipedia.org')
     parser.add_argument('--deploy-test', action='store_true')
     parser.add_argument('--delete-rsync', action='store_true')
+    parser.add_argument('--dev', action='store_true', help='development mode')
     # parser.add_argument('--deploy-demo', action='store_true')
     # parser.add_argument('--deploy-isipedia', action='store_true')
 
@@ -329,7 +331,7 @@ def main():
 
             try:
                 md_files = process_indicator(indicator, o.output+'/', country_names=o.areas, 
-                    templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js)
+                    templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js, dev=o.dev)
                 all_md_files.extend(md_files)
             except Exception as error:
                 raise
