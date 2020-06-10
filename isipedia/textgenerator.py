@@ -179,7 +179,7 @@ def load_ranking(indicator, cube_folder='dist'):
 
 
 def process_indicator(indicator, cube_folder, country_names=None, 
-    templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None, dev=False):
+    templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None, dev=False, setup_only=False):
   
     cfg = load_indicator_config(indicator)
     study_type = cfg['studytype']
@@ -197,6 +197,9 @@ def process_indicator(indicator, cube_folder, country_names=None,
         # extend markdown context with custom values
         for f in contexts_register:
             f(context)
+
+        if setup_only:
+            return context.markdown
 
         tmplfile = select_template(indicator, area, templatesdir=templatesdir)
         tmpl = jinja2.Template(open(tmplfile).read())
@@ -268,6 +271,7 @@ def main():
     parser.add_argument('--deploy-test', action='store_true')
     parser.add_argument('--delete-rsync', action='store_true')
     parser.add_argument('--dev', action='store_true', help='development mode')
+    parser.add_argument('--setup-only', action='store_true', help='only setup stage, do not actually load templates')
     # parser.add_argument('--deploy-demo', action='store_true')
     # parser.add_argument('--deploy-isipedia', action='store_true')
 
@@ -331,7 +335,7 @@ def main():
 
             try:
                 md_files = process_indicator(indicator, o.output+'/', country_names=o.areas, 
-                    templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js, dev=o.dev)
+                    templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js, dev=o.dev, setup_only=o.setup_only)
                 all_md_files.extend(md_files)
             except Exception as error:
                 raise
