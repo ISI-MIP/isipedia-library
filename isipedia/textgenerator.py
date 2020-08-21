@@ -21,7 +21,7 @@ allcountries = sorted(allcountries)
 
 class MultiRanking(dict):
     def __init__(self, ranking=None, area=None):
-        self.area = area 
+        self.area = area
         super().__init__(ranking or {})
 
     def __call__(self, variable, x=None, area=None, method='position', **kwargs):
@@ -64,7 +64,7 @@ class TemplateContext:
         self.study = Study(**self.config)
         self.folder = os.path.join(cube_folder, self.study.url, area.lower())
         if ranking:
-            ranking.area = area # predefine area 
+            ranking.area = area # predefine area
         self.ranking = ranking
         self.makefig = makefig
         self.png = png
@@ -113,7 +113,7 @@ class TemplateContext:
         kwargs.update(figure_functions)
         kwargs.update(markdown_commands)
         kwargs.update(dict(
-            country=self.country, 
+            country=self.country,
             indicator=self.indicator,
             studytype=self.studytype,
             config=self.config,
@@ -178,9 +178,9 @@ def load_ranking(indicator, cube_folder='dist'):
     return ranking
 
 
-def process_indicator(indicator, cube_folder, country_names=None, 
+def process_indicator(indicator, cube_folder, country_names=None,
     templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None, dev=False, setup_only=False):
-  
+
     cfg = load_indicator_config(indicator)
     study_type = cfg['studytype']
 
@@ -193,7 +193,7 @@ def process_indicator(indicator, cube_folder, country_names=None,
 
     def process_area(area):
         context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking, makefig=makefig, png=png, dev=dev)
-
+        context.setup_only = setup_only
         # extend markdown context with custom values
         for f in contexts_register:
             f(context)
@@ -230,7 +230,7 @@ def process_indicator(indicator, cube_folder, country_names=None,
     md_files = []
 
     for area in country_names:
-        print(indicator+ " - " +area)  
+        print(indicator+ " - " +area)
         try:
             md_file = process_area(area)
             md_files.append(md_file)
@@ -253,7 +253,7 @@ def main():
 
     parser.add_argument('--ranking', action='store_true', default=True, help=argparse.SUPPRESS)
     parser.add_argument('--no-ranking', action='store_false', dest='ranking', default=True, help='do not preprocess ranking')
-    
+
     parser.add_argument('indicators', nargs='*', help='one or several yaml configuration files (default to all yaml present in current directory)')
     parser.add_argument('--areas', nargs='*', help='by default: use area field from yaml config')
     parser.add_argument('-o', '--output', default='dist', help='%(default)s')
@@ -334,7 +334,7 @@ def main():
                 preprocess_ranking(cfg, study_path)
 
             try:
-                md_files = process_indicator(indicator, o.output+'/', country_names=o.areas, 
+                md_files = process_indicator(indicator, o.output+'/', country_names=o.areas,
                     templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js, dev=o.dev, setup_only=o.setup_only)
                 all_md_files.extend(md_files)
             except Exception as error:
@@ -359,7 +359,7 @@ def main():
         def deploy(root):
             cmd = ['rsync','-avzr', os.path.join(o.output, study.url)+'/', f'{root}/{study.url}/']
             if o.delete_rsync:
-                cmd.apend('--delete')
+                cmd.append('--delete')
             print(' '.join(cmd))
             subprocess.run(cmd)
 
@@ -387,4 +387,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()    
+    main()
