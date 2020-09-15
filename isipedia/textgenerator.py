@@ -310,6 +310,10 @@ def main():
             logging.warning(f'failed to load: {indicator}.yml')
             continue
 
+        if cfg.get('skip'):
+            print('Skip', indicator)
+            continue
+
         study = Study(**cfg)
 
         if not o.areas:
@@ -325,7 +329,7 @@ def main():
 
         ranking = o.ranking and 'ranking-files' in cfg
 
-        print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'output':o.output, 'templates':o.templates_dir}, o.areas)
+        print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'output':o.output, 'templates':o.templates_dir}, o.areas if len(o.areas) < 3 else f"{len(o.areas)} areas")
 
         if o.markdown:
 
