@@ -375,6 +375,14 @@ def main():
             'templates':study.templates_dir
             }, o.areas if len(o.areas) < 3 else f"{len(o.areas)} areas")
 
+        # Write the study metadata to dist
+        study_file = os.path.join(study.folder, 'metadata.json')
+        print('write to', study_file)
+        os.makedirs(study.folder, exist_ok=True)
+        with open(study_file, 'w') as f:
+            json.dump(vars(study), f)
+
+
         if o.markdown:
             try:
                 md_files = process_study(study, country_names=o.areas, fail_on_error=not o.skip_error,
