@@ -46,7 +46,7 @@ class StudyConfig(NameSpace):
         self.root = root
         self.skip = skip
         self.indicator = indicator or os.path.basename(self.url)
-        self.short_name = short_name or os.path.basename(os.path.dirname(os.path.abspath('')))  # directory under isipedia-studies
+        self.short_name = short_name or os.path.basename(os.path.abspath(''))  # directory under isipedia-studies
         vars(self).update(kwargs) # also accepts fields like 'ranking-files'
 
     def __iter__(self):
