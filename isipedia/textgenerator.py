@@ -10,74 +10,118 @@ import logging
 import functools
 import netCDF4 as nc
 import frontmatter
+import yaml
+from normality import slugify
 
-from isipedia.jsonfile import JsonFile
+
+from isipedia.jsonfile import JsonFile, CsvFile
 from isipedia.country import Country, countrymasks_folder, country_data_folder
-from isipedia.ranking import load_indicator_config, ranking_file, preprocess_ranking, Ranking
-from isipedia.command import contexts_register, commands_register, figures_register
-from isipedia.web import Study, Article, country_codes as allcountries, fix_metadata
+from isipedia.ranking import preprocess_ranking, load_ranking, RankingCmd
+from isipedia.command import study_context_register, contexts_register, commands_register, figures_register
+from isipedia.web import country_codes as allcountries, fix_metadata
 
 allcountries = sorted(allcountries)
 
-class MultiRanking(dict):
-    def __init__(self, ranking=None, area=None):
-        self.area = area
-        super().__init__(ranking or {})
+class NameSpace:
+    def __init__(self, **kwargs):
+        vars(self).update(kwargs)
 
-    def __call__(self, variable, x=None, area=None, method='position', **kwargs):
-        """select the appropriate ranking class and pass on relevant arguments.
-        area defaults to context-specific area
-        """
-        r = self[variable]  # Ranking instance
-        func = getattr(r, method) #  Ranking instance method
-        kwargs['x'] = x
-        if method in ('value', 'number', 'position'):
-            kwargs['area'] = area or self.area
-        return func(**kwargs)
+    def get(self, name, alt=None):
+        return getattr(self, name, alt)
 
 
-class StudyType:
-    def __init__(self, code, name='', description=''):
-        self.code = code
-        self.name = name or code.replace('-',' ').capitalize()
-        self.description = description or ''
-
-
-class Indicator:
-    def __init__(self, code, name):
-        self.code = code
-        self.name = name
-
-
-
-class TemplateContext:
-    """template data accessible within jinja2 and provided to various functions such as figures
-    """
-    def __init__(self, indicator, studytype, area, cube_folder='dist', config=None, ranking=None, makefig=True, variables=None, png=False, dev=False):
-        self.indicator = indicator
-        self.config = config or load_indicator_config(indicator)
+class StudyConfig(NameSpace):
+    def __init__(self, title=None, author=None, area=None, institution=None,
+            topics=None, studytype=None, published=None, doi=None, beta=False, indicator=None, root='dist',
+            skip = False, **kwargs):
+        self.title = title
+        self.author = author or []
+        self.area = area or allcountries
+        self.institution = institution or []
         self.studytype = studytype
-        self.area = area
-        self.cube_folder = cube_folder
-        self.config['area'] = area
-        #self.folder = os.path.join(cube_folder, indicator, studytype, area)
-        self.study = Study(**self.config)
-        self.folder = os.path.join(cube_folder, self.study.url, area.lower())
-        if ranking:
-            ranking.area = area # predefine area
-        self.ranking = ranking
-        self.makefig = makefig
-        self.png = png
-        self.dev = dev
-        self.variables = variables or {}
+        self.topics = topics
+        self.published = published
+        self.doi = doi
+        self.beta = beta
+        self.root = root
+        self.skip = skip
+        self.indicator = indicator or os.path.basename(self.url)
+        vars(self).update(kwargs) # also accepts fields like 'ranking-files'
 
-    def jsonfile(self, name):
-        return os.path.join(self.cube_folder, self.study.url, self.area.lower(), name+'_'+self.area+'.json')
+    def __iter__(self):
+        ' so that "field in config" works'
+        return iter(vars(self))
+
+    @property
+    def url(self):
+        study_url = 'report/'+slugify(self.title)
+        if self.area is None or type(self.area) is list:
+            return study_url
+        else:
+            return study_url +'/'+self.area.lower()
+
+    @property
+    def folder(self):
+        return os.path.join(self.root, self.url)+ '/'
+
+    @classmethod
+    def load(cls, fname, **kwargs):
+        indicator, _ = os.path.splitext(fname)
+        cfgfile = os.path.join(indicator+'.yml')
+        # if not os.path.exists(cfgfile):
+        #     raise ValueError('no config file present for '+indicator)
+        cfg = yaml.safe_load(open(cfgfile))
+        cfg['indicator'] = indicator
+        cfg.update(kwargs)
+        return cls(**cfg)
+
+
+def load_country_stats(area):
+    try:
+        country = Country.load(os.path.join(country_data_folder, area, area+'_general.json'))
+        # stats = CountryStats(area)
+    except Exception as error:
+        print('!!', str(error))
+        logging.warning("country stats not found for: "+area)
+        # raise
+        country = Country("undefined")
+    return country
+
+
+class TemplateContext(StudyConfig):
+    """pass on to jinja2 templates
+    """
+    def __init__(self, study=None, variables=None, area=None, **data):
+        self.study = study or {}
+        self.variables = variables or {}
+        self.area = area
+        if study is not None:
+            data['sub-countries'] = study.area
+        vars(self).update(data)
+
+
+    def __getattr__(self, name):
+        # To access study parameter such as title, etc... unless set here (e.g. area)
+        if hasattr(self.study, name):
+            return getattr(self.study, name)
+        elif name in self.variables:
+            return self.variables[name]
+        else:
+            raise AttributeError(name)
+
+    def get(self, name, alt=None):  # call __getattr__ without raising an error
+        return getattr(self, name, alt)
 
     @property
     def markdown(self):
-        return os.path.join(self.folder, '.{indicator}_{area}.md'.format(**vars(self)))
+        return os.path.join(self.folder, f'.{self.indicator}_{self.area}.md')
 
+    # legacy
+    def jsonfile(self, name, ext=".json"):
+        return os.path.join(self.folder, name+'_'+self.area+ext)
+
+    def csvfile(self, name):
+        return self.jsonfile(name, ext=".csv")
 
     def _simplifyname(self, fname):
         ' determine variable name from json file name '
@@ -88,51 +132,51 @@ class TemplateContext:
 
     def load_json_files(self):
         jsfiles = glob.glob(self.jsonfile('*'))
-        self.variables = {self._simplifyname(fname):JsonFile.load(fname) for fname in jsfiles}
+        variables = {self._simplifyname(fname):JsonFile.load(fname) for fname in jsfiles}
+        if not set(variables).isdisjoint(set(self.variables)):
+            logging.warning("variables already loaded")
+        self.variables.update(variables)
 
-    def load_country_stats(self):
-        try:
-            self.country = Country.load(os.path.join(country_data_folder, self.area, self.area+'_general.json'))
-            # stats = CountryStats(self.area)
-        except Exception as error:
-            print('!!', str(error))
-            logging.warning("country stats not found for: "+self.area)
-            # raise
-            self.country = Country("undefined")
+    def load_csv_files(self):
+        jsfiles = glob.glob(self.csvfile('*'))
+        # print('csv file pattern', self.csvfile('*'))
+        # print('csvfiles', jsfiles)
+        variables = {self._simplifyname(fname):CsvFile.load(fname) for fname in jsfiles}
+        if not set(variables).isdisjoint(set(self.variables)):
+            logging.warning("variables already loaded")
+        self.variables.update(variables)
+
+    def load_files(self):
+        self.load_json_files()
+        self.load_csv_files()
+        # self.load_country_stats()
 
     @property
     def metadata(self):
-        kw = self.config.copy()
+        kw = vars(self.study).copy()
+        kw['area'] = self.area
         fix_metadata(kw)
         return kw
 
     def template_kwargs(self):
         figure_functions = {name:cls(self) for name, cls in figures_register.items()}
         markdown_commands = {name:functools.partial(func, self) for name, func in commands_register.items()}
+        if self.area:
+            country = getattr(self, 'country') or load_country_stats(self.area)
+        else:
+            country = None
         kwargs = self.variables.copy()
         kwargs.update(figure_functions)
         kwargs.update(markdown_commands)
+        kwargs.update({'ranking': RankingCmd(self.get('ranking_data', {}), self.area)})
         kwargs.update(dict(
-            country=self.country,
+            country=country,
             indicator=self.indicator,
             studytype=self.studytype,
-            config=self.config,
-            ranking=self.ranking,
+            config=self.study,
             markdown=self.markdown,
             ))
         return kwargs
-
-
-    def __getattr__(self, name):
-        return self.variables[name]
-
-
-def load_template_context(indicator, study_type, area, cube_folder='dist', load_files=True, **kwargs):
-    context = TemplateContext(indicator, study_type, area, cube_folder, **kwargs)
-    if load_files:
-        context.load_json_files()
-        context.load_country_stats()
-    return context
 
 
 def select_template(indicator, area=None, templatesdir='templates'):
@@ -165,74 +209,86 @@ def select_template(indicator, area=None, templatesdir='templates'):
     # def map(self, variable, x=None, scenario=None, title='', **kwargs):
     #     return self[variable].map(x, scenario, title=title or variable, **kwargs)
 
-def load_ranking(indicator, cube_folder='dist'):
-    cfg = load_indicator_config(indicator)
-    ranking = MultiRanking()
-    for name in cfg.get('ranking-files', []):
-        study_path = os.path.join(cube_folder, Study(**cfg).url)
-        fname = ranking_file(study_path, name)
-        if not os.path.exists(fname):
-            logging.warning('ranking file does not exist: '+fname)
-            continue
-        ranking[name.replace('-','_')] = Ranking.load(fname)
-    return ranking
+def process_markdown(context):
+
+    # extend markdown context with custom values
+    for f in contexts_register:
+        f(context)
+
+    if context.get('setup_only'):
+        return context.markdown
+
+    tmplfile = select_template(context.indicator, context.area, templatesdir=context.templates_dir)
+    tmpl = jinja2.Template(open(tmplfile).read())
+
+    os.makedirs(context.folder, exist_ok=True)
+
+    kwargs = context.template_kwargs()
+
+    text = tmpl.render(**kwargs)
+
+    md_file = context.markdown
+
+    post = frontmatter.Post(text, **context.metadata)
+    frontmatter.dump(post, md_file)
+
+    javascript2 = context.get('javascript', [])
+
+    base, ext = os.path.splitext(tmplfile)
+    candidatejs = base + '.js'
+    if candidatejs not in javascript2 and os.path.exists(candidatejs):
+        javascript2 = [candidatejs] + javascript2
+    for jsfile in javascript2:
+        shutil.copy(jsfile, context.folder)
+
+    return md_file
 
 
-def process_indicator(indicator, cube_folder, country_names=None,
-    templatesdir='templates', fail_on_error=False, makefig=True, png=False, javascript=None, dev=False, setup_only=False):
+def process_study(study, country_names=None, fail_on_error=False, **kwargs):
 
-    cfg = load_indicator_config(indicator)
-    study_type = cfg['studytype']
+    # execute setup scripts, if any
+    for cmd in study.get('setup', []):
+        sp.check_call(cmd, shell=True)
+
+    study_context = TemplateContext(study, **kwargs)
+
+    # execute setup commands from custom.py
+    for f in study_context_register:
+        f(study_context)
+
+    # setup ranking, if required
+    if study.get('ranking-files'):
+        # load country ranking
+        try:
+            study_context.ranking_data = load_ranking(study)
+
+        except FileNotFoundError:
+            print('preprocess ranking !')
+            preprocess_ranking(study)
+            study_context.ranking_data = load_ranking(study)
 
     # Going though all the countries in the list.
     if country_names is None:
-        country_names = allcountries
-
-    # load country ranking
-    ranking = load_ranking(indicator, cube_folder)
-
-    def process_area(area):
-        context = load_template_context(indicator, study_type, area, cube_folder, config=cfg, ranking=ranking, makefig=makefig, png=png, dev=dev)
-        context.setup_only = setup_only
-        # extend markdown context with custom values
-        for f in contexts_register:
-            f(context)
-
-        if setup_only:
-            return context.markdown
-
-        tmplfile = select_template(indicator, area, templatesdir=templatesdir)
-        tmpl = jinja2.Template(open(tmplfile).read())
-
-        os.makedirs(context.folder, exist_ok=True)
-
-        kwargs = context.template_kwargs()
-
-        text = tmpl.render(**kwargs)
-
-        md_file = context.markdown
-
-        post = frontmatter.Post(text, **context.metadata)
-        frontmatter.dump(post, md_file)
-
-        javascript2 = javascript or []
-
-        base, ext = os.path.splitext(tmplfile)
-        candidatejs = base + '.js'
-        if candidatejs not in javascript2 and os.path.exists(candidatejs):
-            javascript2 = [candidatejs] + javascript2
-        for jsfile in javascript2:
-            shutil.copy(jsfile, context.folder)
-
-        return md_file
-
+        country_names = study.area  # list of study areas (before the loop below we have context.area == context.study.area)
 
     md_files = []
 
+    default_context_fields = vars(TemplateContext())
+
     for area in country_names:
-        print(indicator+ " - " +area)
+
+        context = TemplateContext(study,
+            area=area,
+            country=load_country_stats(area),
+            **{k:v for k,v in vars(study_context).items() if k not in default_context_fields})
+
+        print(context.url)
+
+        if context.get('autoload'):
+            context.load_files()
+
         try:
-            md_file = process_area(area)
+            md_file = process_markdown(context)
             md_files.append(md_file)
         except Exception as error:
             if fail_on_error:
@@ -266,10 +322,11 @@ def main():
 
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
-    parser.add_argument('--js', nargs='+', default=[], help='additional javascript to be copied along in the folder')
     parser.add_argument('--deploy', action='store_true', help='deploy to local isipedia.org')
     parser.add_argument('--deploy-test', action='store_true')
+    parser.add_argument('--deploy-demo', action='store_true')
     parser.add_argument('--delete-rsync', action='store_true')
+
     parser.add_argument('--dev', action='store_true', help='development mode')
     parser.add_argument('--setup-only', action='store_true', help='only setup stage, do not actually load templates')
     # parser.add_argument('--deploy-demo', action='store_true')
@@ -304,42 +361,31 @@ def main():
         if indicator.endswith('.yml'):
             indicator, _ = os.path.splitext(indicator)
 
-        try:
-            cfg = load_indicator_config(indicator)
-        except:
-            logging.warning(f'failed to load: {indicator}.yml')
-            continue
+        study = StudyConfig.load(indicator,
+            root=o.output, templates_dir=o.templates_dir)
 
-        if cfg.get('skip'):
+        if study.get('skip'):
             print('Skip', indicator)
             continue
 
-        study = Study(**cfg)
+        if not o.ranking:
+            setattr(study, 'ranking-files', [])
 
         if not o.areas:
-            if study.area:
-                o.areas = study.area
-            else:
-                o.areas = allcountries
+            o.areas = study.area
 
-        if o.makefig is None:
-            makefig = cfg.get('makefig', True)
-        else:
-            makefig = o.makefig
-
-        ranking = o.ranking and 'ranking-files' in cfg
-
-        print('#### process', indicator, {'makefig':makefig, 'ranking': ranking, 'output':o.output, 'templates':o.templates_dir}, o.areas if len(o.areas) < 3 else f"{len(o.areas)} areas")
+        print('#### process', indicator, {
+            'makefig':o.makefig,
+            'ranking': len(study.get('ranking-files')) > 0,
+            'output':study.root,
+            'templates':study.templates_dir
+            }, o.areas if len(o.areas) < 3 else f"{len(o.areas)} areas")
 
         if o.markdown:
-
-            if ranking:
-                study_path = os.path.join(o.output, study.url)
-                preprocess_ranking(cfg, study_path)
-
             try:
-                md_files = process_indicator(indicator, o.output+'/', country_names=o.areas,
-                    templatesdir=o.templates_dir, fail_on_error=not o.skip_error, makefig=makefig, png=False, javascript=o.js, dev=o.dev, setup_only=o.setup_only)
+                md_files = process_study(study, country_names=o.areas, fail_on_error=not o.skip_error,
+                    makefig=o.makefig, dev=o.dev, setup_only=o.setup_only, png=o.png)
+
                 all_md_files.extend(md_files)
             except Exception as error:
                 raise
@@ -347,8 +393,7 @@ def main():
                 continue
 
         else:
-            md_files = [TemplateContext(indicator, cfg['studytype'], config=cfg, area=area, cube_folder=o.output).markdown for area in o.areas]
-
+            md_files = [TemplateContext(study, area=area).markdown for area in o.areas]
 
         if o.build:
             from isipedia.web import root
@@ -373,21 +418,26 @@ def main():
             # print(' '.join(cmd))
             # subprocess.run(cmd)
 
-
-        if o.deploy:
-            from isipedia.web import root
-            deploy(root / 'dist')
-
-
-        if o.deploy_test:
+        def deploy_remote(site):
             import socket
             host = socket.gethostname()
             if host.startswith('login'):
                 server = 'se59:'
             else:
                 server = 'isipedia.org:'
-            remote = server+'/webservice/test.isipedia.org'
+            remote = server+'/webservice/'+site
             deploy(remote)
+
+
+        if o.deploy:
+            from isipedia.web import root
+            deploy(root / 'dist')
+
+        if o.deploy_test:
+            deploy_remote('test.isipedia.org')
+
+        if o.deploy_demo:
+            deploy_remote('demo.isipedia.org')
 
 
 if __name__ == '__main__':

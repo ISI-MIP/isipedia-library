@@ -1,23 +1,23 @@
 """Related to ranking data
 """
 import json
-import yaml
 import os
 import glob
 import logging
+from tqdm import tqdm
 
-from isipedia.jsonfile import JsonFile
+from isipedia.jsonfile import JsonFile, CsvFile
 
 def calculate_ranking(study_path, name, country_names=None):
     """load ranking data"""
-    jsonfile = lambda area: os.path.join(study_path, f'{area.lower()}', name+f'_{area}.json')
-    
+    csvfile = lambda area: os.path.join(study_path, f'{area.lower()}', name+f'_{area}.csv')
+
     if country_names is None:
-        files = sorted(glob.glob(jsonfile(area='*')))
-        logging.info('found {} matching files'.format(len(files)))
+        files = sorted(glob.glob(csvfile(area='*')))
+        # logging.info('found {} matching files'.format(len(files)))
 
         ## check
-        #country_dirs = sorted(glob.glob(os.path.join(*os.path.split(var.jsonfile('*', cube_path))[:-1])+'/'))
+        #country_dirs = sorted(glob.glob(os.path.join(*os.path.split(var.csvfile('*', cube_path))[:-1])+'/'))
         #if len(country_dirs) != len(files):
         #    logging.warning('found {} country dirs, but {} ranking-variable files'.format(len(country_dirs), len(files)))
         #    areas_files = [os.path.basename(os.path.dirname(d)) for d in files]
@@ -25,16 +25,21 @@ def calculate_ranking(study_path, name, country_names=None):
         #    print('set difference:', set(areas_dir).difference(set(areas_files)))
 
     else:
-        files = [jsonfile(area=area) for area in country_names]
+        files = [csvfile(area=area) for area in country_names]
 
     n = None
     ref = None
     data = {}
-    for f in files:
+
+    for f in tqdm(files):
         area = os.path.basename(os.path.dirname(f))
         if area == 'world':
             continue
-        js = JsonFile.load(f)
+        # print('...', area)
+        js = CsvFile.load(f)
+        if not js.x:
+
+            continue
         if n is None:
             n = len(js.x)
             ref = f
@@ -48,33 +53,14 @@ def calculate_ranking(study_path, name, country_names=None):
             data[area] = {None: js.getarray()}
     # data['_plot_type'] = js.plot_type
     # data['_filename'] = var.jsonfile('world', cube_path)  # used in ranking map next to world folder...
-    js = JsonFile.load(jsonfile(area='world'))  # load world-level and copy metadata
-    data['_metadata'] = {k:v for k,v in js._js.items() if k != 'data'}
+    js = CsvFile.load(csvfile(area='world'))  # load world-level and copy metadata
+    data['_metadata'] = js.get_metadata()
 
     return data
-
-
-def load_indicator_config(indicator):
-    cfgfile = os.path.join(indicator+'.yml')
-    if not os.path.exists(cfgfile):
-        logging.warn('no config file present for '+indicator)
-    return yaml.safe_load(open(cfgfile))
-
 
 def ranking_file(study_path, variable):
     # return os.path.join(cube_path, indicator, 'ranking.{}.{}.{}.json'.format(indicator, category, variable))
     return os.path.join(study_path, 'ranking.{}.json'.format(variable))
-
-
-def preprocess_ranking(cfg, study_path, country_names=None):
-    for name in cfg.get('ranking-files',[]):
-        print('ranking preprocessing:',study_path, name)
-        data = calculate_ranking(study_path, name, country_names=country_names)
-        fname = ranking_file(study_path, name)
-        dname = os.path.dirname(fname)
-        if not os.path.exists(dname):
-            os.makedirs(dname)
-        json.dump(data, open(fname, 'w'))
 
 
 def ordinal(num):
@@ -96,18 +82,11 @@ class Ranking:
 
     def value(self, area, x, scenario=None):
         index = self.data['_index'].index(x)
-        if self.plot_type == 'indicator_vs_temperature':
-            return self.data[area.lower()]['null'][index]
-        else:
-            return self.data[area.lower()][scenario][index]
+        return self.data[area.lower()][scenario or 'null'][index]
 
     def values(self, x, scenario=None):
         index = self.data['_index'].index(x)
-        if self.plot_type == 'indicator_vs_temperature':
-            values = [self.data[area.lower()]['null'][index] for area in self.areas]
-        else:
-            values = [self.data[area.lower()][scenario][index] for area in self.areas]
-        return values
+        return [self.data[area.lower()][scenario or 'null'][index] for area in self.areas]
 
     def sorted_areas(self, x, scenario=None):
         values = self.values(x, scenario)
@@ -130,3 +109,42 @@ class Ranking:
     def load(cls, fname):
         ranking_data = json.load(open(fname))
         return cls(ranking_data)
+
+
+class RankingCmd:
+    """A container class to contain various Ranking instance
+    """
+    def __init__(self, data=None, area=None):
+        self.area = area
+        self.data = data or {}
+
+    def __call__(self, variable, x=None, area=None, method='position', **kwargs):
+        """select the appropriate ranking class and pass on relevant arguments.
+        area defaults to context-specific area
+        """
+        r = self.data[variable]  # Ranking instance
+        func = getattr(r, method) #  Ranking instance method
+        kwargs['x'] = x
+        if method in ('value', 'number', 'position'):
+            kwargs['area'] = area or self.area
+        return func(**kwargs)
+
+
+def preprocess_ranking(cfg, country_names=None):
+    for name in cfg.get('ranking-files',[]):
+        print('ranking preprocessing:', cfg.get('folder'), name)
+        data = calculate_ranking(cfg.get('folder'), name, country_names=country_names or cfg.get('area'))
+        print('==>>', len(data), 'countries were covered', ", ".join(data))
+        fname = ranking_file(cfg.get('folder'), name)
+        dname = os.path.dirname(fname)
+        if not os.path.exists(dname):
+            os.makedirs(dname)
+        json.dump(data, open(fname, 'w'))
+
+
+def load_ranking(cfg):
+    ranking_data = {}
+    for name in cfg.get('ranking-files', []):
+        fname = ranking_file(cfg.get('folder'), name)
+        ranking_data[name] = Ranking.load(fname)
+    return ranking_data

@@ -23,8 +23,8 @@ class NpEncoder(json.JSONEncoder):
 
 
 def _hashsum(kwargs, l=6):
-    string = json.dumps(kwargs, sort_keys=True)    
-    return hashlib.sha1(string.encode()).hexdigest()[:l] 
+    string = json.dumps(kwargs, sort_keys=True)
+    return hashlib.sha1(string.encode()).hexdigest()[:l]
 
 
 def _shortname(fname, area):
@@ -101,7 +101,7 @@ class SuperFig:
             if not os.path.exists(figdir):
                 os.makedirs(figdir)
             path_noext, ext = os.path.splitext(figpath)
-            self.save_and_close(fig, path_noext) 
+            self.save_and_close(fig, path_noext)
 
         return self.insert_cmd(figid, caption)
 
@@ -154,7 +154,7 @@ def isipedia_theme():
             "padding": 0,
             "view": {
                 "continuousWidth": 600, # this has no effect with autosize fit-x
-                "continuousHeight": 300, 
+                "continuousHeight": 300,
                 "strokeOpacity": 0, # do not show axis frame
                 },
             "autosize": {"contains": "padding", "type": "fit-x"}, # this cancels continuousWidth
@@ -223,7 +223,7 @@ scale = 2
 mpl.rcParams['figure.figsize'] = 600/my_dpi*scale, 300/my_dpi*scale
 
 
-def get_ranking_data(countries, ranking, x, scenario=None, method='number'):
+def get_ranking_data(countries, ranking, x, scenario=None, method='number', plot_label_y='', plot_unit_y=''):
     """get ranking data for figures"""
     import pandas as pd
 
@@ -243,6 +243,6 @@ def get_ranking_data(countries, ranking, x, scenario=None, method='number'):
         if value is not None:
             value = round(value, 2)
         rank = ranking.number(area.lower(), x, scenario)
-        ranking_data.append((area, name, value, rank, ranking.plot_label_y, ranking.plot_unit_y))
+        ranking_data.append((area, name, value, rank, plot_label_y, plot_unit_y))
 
     return pd.DataFrame(ranking_data, columns=["Code", "Country", "Value", "Rank", 'label', 'unit'])

@@ -3,6 +3,7 @@
 # from contextlib import contextmanager
 commands_register = {}
 contexts_register = []
+study_context_register = []
 
 # plumbing to register figures
 figures_register = {}
@@ -16,6 +17,9 @@ def isipediafigure(name):
 
     return decorator
 
+def studycontext(f):
+    study_context_register.append(f)
+    return f
 
 def markdowncontext(f):
     contexts_register.append(f)
