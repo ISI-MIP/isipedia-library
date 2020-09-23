@@ -18,7 +18,7 @@ from isipedia.jsonfile import JsonFile, CsvFile
 from isipedia.country import Country, countrymasks_folder, country_data_folder
 from isipedia.ranking import preprocess_ranking, load_ranking, RankingCmd
 from isipedia.command import study_context_register, contexts_register, commands_register, figures_register
-from isipedia.web import country_codes as allcountries, fix_metadata
+from isipedia.web import country_codes as allcountries, country_names, fix_metadata
 
 allcountries = sorted(allcountries)
 
@@ -96,8 +96,6 @@ class TemplateContext(StudyConfig):
         self.study = study or {}
         self.variables = variables or {}
         self.area = area
-        if study is not None:
-            data['sub-countries'] = study.area
         vars(self).update(data)
 
 
@@ -156,6 +154,8 @@ class TemplateContext(StudyConfig):
     def metadata(self):
         kw = vars(self.study).copy()
         kw['area'] = self.area
+        if self.area == 'world':
+            kw['sub-countries'] = [{'code':a, 'name':country_names[a]} for a in self.study.area]
         fix_metadata(kw)
         return kw
 
