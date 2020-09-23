@@ -232,14 +232,7 @@ def process_markdown(context):
     post = frontmatter.Post(text, **context.metadata)
     frontmatter.dump(post, md_file)
 
-    javascript2 = context.get('javascript', [])
 
-    base, ext = os.path.splitext(tmplfile)
-    candidatejs = base + '.js'
-    if candidatejs not in javascript2 and os.path.exists(candidatejs):
-        javascript2 = [candidatejs] + javascript2
-    for jsfile in javascript2:
-        shutil.copy(jsfile, context.folder)
 
     return md_file
 
@@ -394,6 +387,12 @@ def main():
 
         else:
             md_files = [TemplateContext(study, area=area).markdown for area in o.areas]
+
+        # copy all assets
+        if os.path.exists('assets'):
+            cmd = ['rsync','-avzr', 'assets', study.folder+ '/']
+            subprocess.check_call(cmd)
+
 
         if o.build:
             from isipedia.web import root
