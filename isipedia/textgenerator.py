@@ -33,7 +33,7 @@ class NameSpace:
 class StudyConfig(NameSpace):
     def __init__(self, title=None, author=None, area=None, institution=None,
             topics=None, studytype=None, published=None, doi=None, beta=False, indicator=None, root='dist',
-            skip = False, **kwargs):
+            skip = False, short_name=None, **kwargs):
         self.title = title
         self.author = author or []
         self.area = area or allcountries
@@ -46,6 +46,7 @@ class StudyConfig(NameSpace):
         self.root = root
         self.skip = skip
         self.indicator = indicator or os.path.basename(self.url)
+        self.short_name = short_name or os.path.basename(os.path.dirname(os.path.abspath('')))  # directory under isipedia-studies
         vars(self).update(kwargs) # also accepts fields like 'ranking-files'
 
     def __iter__(self):
