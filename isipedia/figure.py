@@ -150,7 +150,7 @@ def isipedia_theme():
 
     return {
         "config" : {
-            "background": '#F1F4F4',
+            # "background": '#F1F4F4',
             "padding": 0,
             "view": {
                 "continuousWidth": 600, # this has no effect with autosize fit-x
