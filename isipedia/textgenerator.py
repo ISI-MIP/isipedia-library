@@ -370,7 +370,7 @@ def main():
 
         print('#### process', indicator, {
             'makefig':o.makefig,
-            'ranking': len(study.get('ranking-files')) > 0,
+            'ranking': bool(study.get('ranking-files')),
             'output':study.root,
             'templates':study.templates_dir
             }, o.areas if len(o.areas) < 3 else f"{len(o.areas)} areas")
