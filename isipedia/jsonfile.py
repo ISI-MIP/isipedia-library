@@ -251,7 +251,7 @@ class CsvFile(File):
             v = copy.deepcopy(self)
 
         for j in [self._median_col, self._upper_col, self._lower_col]:
-            v.data.values[:, j] = func(v.data.values[:, j])
+            v.data.iloc[:, j] = func(v.data.iloc[:, j])
 
         return v
 
