@@ -323,6 +323,7 @@ def main():
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
     parser.add_argument('--no-update', action='store_false', default=True, dest='update', help='do not update existing markdown')
+    parser.add_argument('--use-time', action='store_true')
     parser.add_argument('--deploy', action='store_true', help='deploy to local isipedia.org')
     parser.add_argument('--deploy-test', action='store_true')
     parser.add_argument('--deploy-demo', action='store_true')
@@ -414,6 +415,7 @@ def main():
             from isipedia.web import root
             import sys
             cmd = [sys.executable,os.path.join(root, 'scripts', 'process_articles.py'), '--update','--out', o.output, '--html'] + md_files
+            if o.use_time: cmd += ['--use-time']
             if o.png: cmd += ['--png']
             if o.pdf: cmd += ['--pdf']
             print(' '.join(cmd))
