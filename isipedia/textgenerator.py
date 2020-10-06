@@ -240,7 +240,7 @@ def process_markdown(context):
     return md_file
 
 
-def process_study(study, country_names=None, fail_on_error=False, **kwargs):
+def process_study(study, country_names=None, fail_on_error=False, update=True, **kwargs):
 
     # execute setup scripts, if any
     for cmd in study.get('setup', []):
@@ -277,6 +277,10 @@ def process_study(study, country_names=None, fail_on_error=False, **kwargs):
             area=area,
             country=load_country_stats(area),
             **{k:v for k,v in vars(study_context).items() if k not in default_context_fields})
+
+        if os.path.exists(context.markdown) and not update:
+            md_files.append(context.markdown)
+            continue
 
         print(context.url)
 
@@ -318,6 +322,7 @@ def main():
 
     parser.add_argument('--templates-dir', default='templates', help='templates directory (default: %(default)s)')
     parser.add_argument('--skip-error', action='store_true', help='skip area with error instead of raising exception')
+    parser.add_argument('--no-update', action='store_false', default=True, dest='update', help='do not update existing markdown')
     parser.add_argument('--deploy', action='store_true', help='deploy to local isipedia.org')
     parser.add_argument('--deploy-test', action='store_true')
     parser.add_argument('--deploy-demo', action='store_true')
@@ -388,7 +393,7 @@ def main():
         if o.markdown:
             try:
                 md_files = process_study(study, country_names=o.areas, fail_on_error=not o.skip_error,
-                    makefig=o.makefig, dev=o.dev, setup_only=o.setup_only, png=o.png)
+                    makefig=o.makefig, dev=o.dev, setup_only=o.setup_only, png=o.png, update=o.update)
 
                 all_md_files.extend(md_files)
             except Exception as error:
