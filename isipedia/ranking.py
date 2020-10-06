@@ -130,10 +130,10 @@ class RankingCmd:
         return func(**kwargs)
 
 
-def preprocess_ranking(cfg, country_names=None):
+def preprocess_ranking(cfg):
     for name in cfg.get('ranking-files',[]):
         print('ranking preprocessing:', cfg.get('folder'), name)
-        data = calculate_ranking(cfg.get('folder'), name, country_names=country_names or cfg.get('area'))
+        data = calculate_ranking(cfg.get('folder'), name, country_names=cfg.get('area'))
         print('==>>', len(data), 'countries were covered', ", ".join(data))
         fname = ranking_file(cfg.get('folder'), name)
         dname = os.path.dirname(fname)

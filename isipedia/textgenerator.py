@@ -74,6 +74,8 @@ class StudyConfig(NameSpace):
         cfg = yaml.safe_load(open(cfgfile))
         cfg['indicator'] = indicator
         cfg.update(kwargs)
+        areas = [area for area in cfg.get('area', allcountries) if area not in cfg.get('exclude-countries',[])]
+        cfg['area'] = areas
         return cls(**cfg)
 
 
