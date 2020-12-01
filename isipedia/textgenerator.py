@@ -33,14 +33,16 @@ class NameSpace:
 class StudyConfig(NameSpace):
     def __init__(self, title=None, author=None, area=None, institution=None,
             topics=None, studytype=None, published=None, doi=None, beta=False, indicator=None, root='dist',
-            skip = False, short_name=None, **kwargs):
+            skip=False, short_name=None, story=False, **kwargs):
+
         self.title = title
         self.author = author or []
-        self.area = area or allcountries
+        self.area = area or (allcountries if not story else '')
         self.institution = institution or []
         self.studytype = studytype
         self.topics = topics
         self.published = published
+        self.story = story
         self.doi = doi
         self.beta = beta
         self.root = root
@@ -54,8 +56,12 @@ class StudyConfig(NameSpace):
         return iter(vars(self))
 
     @property
+    def stem(self):
+        return 'story' if self.story else 'report'
+
+    @property
     def url(self):
-        study_url = 'report/'+slugify(self.title)
+        study_url = self.stem + '/'+slugify(self.title)
         if self.area is None or type(self.area) is list:
             return study_url
         else:
@@ -74,8 +80,9 @@ class StudyConfig(NameSpace):
         cfg = yaml.safe_load(open(cfgfile))
         cfg['indicator'] = indicator
         cfg.update(kwargs)
-        areas = [area for area in cfg.get('area', allcountries) if area not in cfg.get('exclude-countries',[])]
-        cfg['area'] = areas
+        if not cfg.get('story'):
+            areas = [area for area in cfg.get('area', allcountries) if area not in cfg.get('exclude-countries',[])]
+            cfg['area'] = areas
         return cls(**cfg)
 
 
@@ -115,7 +122,11 @@ class TemplateContext(StudyConfig):
 
     @property
     def markdown(self):
-        return os.path.join(self.folder, f'.{self.indicator}_{self.area}.md')
+        if self.area:
+            return os.path.join(self.folder, f'.source_{self.area}.md')
+            # return os.path.join(self.folder, f'.{self.indicator}_{self.area}.md')
+        else:
+            return os.path.join(self.folder, f'.source.md')
 
     # legacy
     def jsonfile(self, name, ext=".json"):
@@ -127,7 +138,7 @@ class TemplateContext(StudyConfig):
     def _simplifyname(self, fname):
         ' determine variable name from json file name '
         name, ext = os.path.splitext(os.path.basename(fname))
-        if name.endswith(self.area):
+        if self.area and name.endswith(self.area):
             name = name[:-len(self.area)-1]
         return name.replace('-','_')
 
@@ -171,7 +182,8 @@ class TemplateContext(StudyConfig):
         kwargs = self.variables.copy()
         kwargs.update(figure_functions)
         kwargs.update(markdown_commands)
-        kwargs.update({'ranking': RankingCmd(self.get('ranking_data', {}), self.area)})
+        if self.area:
+            kwargs.update({'ranking': RankingCmd(self.get('ranking_data', {}), self.area)})
         kwargs.update(dict(
             country=country,
             indicator=self.indicator,
@@ -265,7 +277,7 @@ def process_study(study, country_names=None, fail_on_error=False, update=True, *
 
     # Going though all the countries in the list.
     if country_names is None:
-        country_names = study.area  # list of study areas (before the loop below we have context.area == context.study.area)
+        country_names = study.area or [''] # list of study areas (before the loop below we have context.area == context.study.area)
 
     md_files = []
 
@@ -275,7 +287,7 @@ def process_study(study, country_names=None, fail_on_error=False, update=True, *
 
         context = TemplateContext(study,
             area=area,
-            country=load_country_stats(area),
+            country=load_country_stats(area) if area else None,
             **{k:v for k,v in vars(study_context).items() if k not in default_context_fields})
 
         if os.path.exists(context.markdown) and not update:
@@ -374,7 +386,7 @@ def main():
             setattr(study, 'ranking-files', [])
 
         if not o.areas:
-            o.areas = study.area
+            o.areas = study.area or ['']
 
         print('#### process', indicator, {
             'makefig':o.makefig,
@@ -388,7 +400,7 @@ def main():
         print('write to', study_file)
         os.makedirs(study.folder, exist_ok=True)
         with open(study_file, 'w') as f:
-            json.dump(vars(study), f)
+            json.dump(vars(study), f, default=str)
 
 
         if o.markdown:
