@@ -11,7 +11,6 @@ setup(name='Isipedia Library',
       packages=['isipedia'],
       scripts=['scripts/isipedia_build.py'],
       license = "MIT",
-      requires = [],
-        install_requires=open('requirements.txt').read(),
+      install_requires=open('requirements.txt').read(),
       )
 

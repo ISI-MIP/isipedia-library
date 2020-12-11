@@ -8,14 +8,13 @@ import shutil
 import jinja2
 import logging
 import functools
-import netCDF4 as nc
 import frontmatter
 import yaml
 from normality import slugify
 
 
 from isipedia.jsonfile import JsonFile, CsvFile
-from isipedia.country import Country, countrymasks_folder, country_data_folder
+from isipedia.country import Country, country_data_folder
 from isipedia.ranking import preprocess_ranking, load_ranking, RankingCmd
 from isipedia.command import study_context_register, contexts_register, commands_register, figures_register
 from isipedia.web import country_codes as allcountries, country_names, fix_metadata
@@ -365,7 +364,6 @@ def main():
         except ImportError as error:
             raise
 
-    country_data_folder = os.path.join(countrymasks_folder, 'country_data')
     print('country_data:', country_data_folder)
 
     all_md_files = []

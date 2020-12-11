@@ -1,35 +1,74 @@
 """Get details from World Bank etc
 """
 import os, sys, logging
+import isipedia
 
-# find out the appropriate paths
-found = False
-for test in ['countrymasks', '../countrymasks', '../../countrymasks']:
-    if os.path.exists(test):
-        logging.info('append '+test+' to path')
-        sys.path.append(test)
-        found = True
-        break
-
-if not found: logging.warning('countrymasks repository was not found')
-
-try:
-    import country_data
-except ImportError:
-    logging.warning('failed import country_data (probably countrymasks was not found)')
-    raise
-    
-from country_data import CountryStats, CountryStatDB, countrymasks as countrymasks_folder, country_data_path as country_data_folder
+# countrymasks_folder = os.path.dirname(__file__)
+root = os.path.dirname(isipedia.__file__)
+country_data_folder = os.path.join(root, 'country_data')
+countrymasks_folder = country_data_folder
 
 
-class Country(CountryStats):
+class Country:
+    """This is the class for the corresponding json file in country_data
+    """
+
+    def __init__(self, name, type="country", sub_countries=[], code=None, stats=None):
+        self.name = name
+        self.type = type
+        self.code = code
+        self.sub_countries = sub_countries
+        self.stats = stats or []
+
+    def get(self, name, insert=False):
+        try:
+            i = [e['type'] for e in self.stats].index(name)
+            return self.stats[i]
+        except ValueError:
+            if insert:
+                e = {'type': name}
+                self.stats.append(e)
+                return e
+            else:
+                raise
+
+    def getvalue(self, name, missing=float('nan')):
+        try:
+            return self.get(name)['value']
+        except ValueError:
+            return missing
+
+    @classmethod
+    def load(cls, fname):
+        js = json.load(open(fname))
+        code = os.path.basename(os.path.dirname(fname))
+        return cls(js['name'], js.get('type', 'country'), js.get('sub-countries',[]), code=js.get('code', code), stats=js.get('stats', []))
+
+    def save(self, fname):
+        cdir = os.path.dirname(fname)
+        if not os.path.exists(cdir):
+            logging.info('create '+repr(cdir))
+            os.makedirs(cdir)
+
+        js = {
+            'name': self.name,
+            'code': self.code,
+            'type': self.type,
+            'sub-countries': self.sub_countries,
+            'stats': self.stats,
+        }
+        json.dump(js, open(fname, 'w'))
+
+
+    def __repr__(self):
+        return 'Country({name}, {code})'.format(**vars(self))
 
     @property
     def nameS(self):
         if self.name[len(self.name)-1] == 's':
           return self.name+'’'
         else:
-          return self.name+'’s'   
+          return self.name+'’s'
 
     @property
     def thename(self):

@@ -1,2 +1,3 @@
 netCDF4
 pandas
+'isipedia-countries @ https://github.com/ISI-MIP/isipedia-countries/archive/master.tar.gz'
