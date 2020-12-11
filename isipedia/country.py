@@ -1,13 +1,10 @@
-"""Get details from World Bank etc
-"""
-import os, sys, logging
-import isipedia
+import warnings
 
-# countrymasks_folder = os.path.dirname(__file__)
-root = os.path.dirname(isipedia.__file__)
-country_data_folder = os.path.join(root, 'country_data')
-countrymasks_folder = country_data_folder
-
+try:
+    from country_data import country_data_folder, countrymasks_folder
+except ImportError:
+    warnings.warn("See https://github.com/ISI-MIP/isipedia-countries for install instruction")
+    raise
 
 class Country:
     """This is the class for the corresponding json file in country_data

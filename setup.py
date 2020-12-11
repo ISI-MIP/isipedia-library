@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 import versioneer
 
 setup(name='Isipedia Library',
@@ -11,6 +11,6 @@ setup(name='Isipedia Library',
       packages=['isipedia'],
       scripts=['scripts/isipedia_build.py'],
       license = "MIT",
-      install_requires=open('requirements.txt').read(),
+      install_requires=open('requirements.txt').read().splitlines(),
       )
 
