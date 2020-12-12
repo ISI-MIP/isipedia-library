@@ -12,14 +12,12 @@ import frontmatter
 import yaml
 from normality import slugify
 
-
 from isipedia.jsonfile import JsonFile, CsvFile
-from isipedia.country import Country, country_data_folder
+from isipedia.country import country_codes as allcountries, country_names, get_country as load_country_stats
 from isipedia.ranking import preprocess_ranking, load_ranking, RankingCmd
 from isipedia.command import study_context_register, contexts_register, commands_register, figures_register
-from isipedia.web import country_codes as allcountries, country_names, fix_metadata
+from isipedia.web import fix_metadata
 
-allcountries = sorted(allcountries)
 
 class NameSpace:
     def __init__(self, **kwargs):
@@ -31,7 +29,7 @@ class NameSpace:
 
 class StudyConfig(NameSpace):
     def __init__(self, title=None, author=None, area=None, institution=None,
-            topics=None, studytype=None, published=None, doi=None, beta=False, indicator=None, root='dist',
+            topics=None, studytype=None, published=None, doi=None, beta=False, indicator=None, dist='dist',
             skip=False, short_name=None, story=False, **kwargs):
 
         self.title = title
@@ -44,7 +42,7 @@ class StudyConfig(NameSpace):
         self.story = story
         self.doi = doi
         self.beta = beta
-        self.root = root
+        self.dist = dist
         self.skip = skip
         self.indicator = indicator or os.path.basename(self.url)
         self.short_name = short_name or os.path.basename(os.path.abspath(''))  # directory under isipedia-studies
@@ -55,12 +53,12 @@ class StudyConfig(NameSpace):
         return iter(vars(self))
 
     @property
-    def stem(self):
+    def base(self):
         return 'story' if self.story else 'report'
 
     @property
     def url(self):
-        study_url = self.stem + '/'+slugify(self.title)
+        study_url = self.base + '/'+slugify(self.title)
         if self.area is None or type(self.area) is list:
             return study_url
         else:
@@ -68,7 +66,7 @@ class StudyConfig(NameSpace):
 
     @property
     def folder(self):
-        return os.path.join(self.root, self.url)+ '/'
+        return os.path.join(self.dist, self.url)+ '/'
 
     @classmethod
     def load(cls, fname, **kwargs):
@@ -83,18 +81,6 @@ class StudyConfig(NameSpace):
             areas = [area for area in cfg.get('area', allcountries) if area not in cfg.get('exclude-countries',[])]
             cfg['area'] = areas
         return cls(**cfg)
-
-
-def load_country_stats(area):
-    try:
-        country = Country.load(os.path.join(country_data_folder, area, area+'_general.json'))
-        # stats = CountryStats(area)
-    except Exception as error:
-        print('!!', str(error))
-        logging.warning("country stats not found for: "+area)
-        # raise
-        country = Country("undefined")
-    return country
 
 
 class TemplateContext(StudyConfig):
@@ -364,8 +350,6 @@ def main():
         except ImportError as error:
             raise
 
-    print('country_data:', country_data_folder)
-
     all_md_files = []
 
     for indicator in o.indicators:
@@ -374,7 +358,7 @@ def main():
             indicator, _ = os.path.splitext(indicator)
 
         study = StudyConfig.load(indicator,
-            root=o.output, templates_dir=o.templates_dir)
+            dist=o.output, templates_dir=o.templates_dir)
 
         if study.get('skip'):
             print('Skip', indicator)
@@ -389,7 +373,7 @@ def main():
         print('#### process', indicator, {
             'makefig':o.makefig,
             'ranking': bool(study.get('ranking-files')),
-            'output':study.root,
+            'output':study.dist,
             'templates':study.templates_dir
             }, o.areas if len(o.areas) < 3 else f"{len(o.areas)} areas")
 
@@ -458,7 +442,7 @@ def main():
 
         if o.deploy:
             from isipedia.web import root
-            deploy(root / 'dist')
+            deploy(dist / 'dist')
 
         if o.deploy_test:
             deploy_remote('test.isipedia.org')

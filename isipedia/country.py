@@ -2,12 +2,14 @@ import json
 import os
 import warnings
 import logging
+import glob
 
 try:
     from country_data import country_data_folder, countrymasks_folder
 except ImportError:
     warnings.warn("See https://github.com/ISI-MIP/isipedia-countries for install instruction")
     raise
+
 
 class Country:
     """This is the class for the corresponding json file in country_data
@@ -85,3 +87,25 @@ class Country:
     def area(self):
         return self.getvalue('SURFACE_AREA')
 
+
+
+def get_country(code):
+    """return Country class
+    """
+    i = [c.lower() for c in countries_codes].index(code.lower())
+    return countries[i]
+
+
+# read all countries on import
+countries = []
+countries_codes = []
+countries_names = []
+
+# sort by code name, world first
+_sort_key = lambda x: os.path.basename(os.path.dirname(x)).lower().replace('world', '_')
+
+for jsonpath in sorted(glob.glob(os.path.join(country_data_folder, '*', '*_general.json')), key=_sort_key):
+    country = Country.load(jsonpath)
+    countries.append(country)
+    countries_codes.append(country.code)
+    countries_names.append(country.name)
