@@ -99,7 +99,7 @@ def get_country(code):
 # read all countries on import
 countries = []
 country_codes = []
-country_names = []
+country_names = {}
 
 # sort by code name, world first
 _sort_key = lambda x: os.path.basename(os.path.dirname(x)).lower().replace('world', '_')
@@ -108,4 +108,4 @@ for jsonpath in sorted(glob.glob(os.path.join(country_data_folder, '*', '*_gener
     country = Country.load(jsonpath)
     countries.append(country)
     country_codes.append(country.code)
-    country_names.append(country.name)
+    country_names[country.code] = country.name
