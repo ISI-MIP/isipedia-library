@@ -98,8 +98,8 @@ def get_country(code):
 
 # read all countries on import
 countries = []
-countries_codes = []
-countries_names = []
+country_codes = []
+country_names = []
 
 # sort by code name, world first
 _sort_key = lambda x: os.path.basename(os.path.dirname(x)).lower().replace('world', '_')
@@ -107,5 +107,5 @@ _sort_key = lambda x: os.path.basename(os.path.dirname(x)).lower().replace('worl
 for jsonpath in sorted(glob.glob(os.path.join(country_data_folder, '*', '*_general.json')), key=_sort_key):
     country = Country.load(jsonpath)
     countries.append(country)
-    countries_codes.append(country.code)
-    countries_names.append(country.name)
+    country_codes.append(country.code)
+    country_names.append(country.name)
