@@ -11,6 +11,13 @@ setup(name='isipedia',
       packages=['isipedia'],
       scripts=['scripts/isipedia_build.py'],
       license = "MIT",
-      install_requires=open('requirements.txt').read().splitlines(),
+      install_requires = ['tdqm','python-frontmatter', 'jinja2'],
+      extras_require = {
+          'data': ['pandas', 'numpy', 'xarray', 'netCDF4'],
+          'figure': ['matplotlib', 'altair'],
+          'all': ['python-frontmatter', 'jinja2', 'tdqm',
+                  'dimarray', 'pandas', 'numpy', 'xarray', 'netCDF4',
+                  'matplotlib', 'altair'],
+      },
       )
 
