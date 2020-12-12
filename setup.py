@@ -1,7 +1,7 @@
 from distutils.core import setup
 import versioneer
 
-setup(name='Isipedia Library',
+setup(name='isipedia',
       version=versioneer.get_version(),
       cmdclass = versioneer.get_cmdclass(),
       author='Mahe Perrette for ISIpedia',
